@@ -148,11 +148,10 @@ final class SettingsStore: SettingsProviding, @unchecked Sendable {
     func current() async -> LlmConfig {
         let id = providerId
         let preset = id == "custom" ? Presets.preset(of: nil) : Presets.preset(of: id)
-        let base = (customBaseUrl ?? preset.baseUrl)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let base = normalizedBase(customBaseUrl ?? preset.baseUrl)
         return LlmConfig(
             providerId: id,
-            baseUrl: trimTrailingSlash(base.isEmpty ? preset.baseUrl : base),
+            baseUrl: base.isEmpty ? preset.baseUrl : base,
             apiKey: apiKey(for: id),
             chatModel: nonEmpty(customChatModel) ?? preset.chatModel,
             vlModel: nonEmpty(customVlModel) ?? preset.vlModel,
@@ -190,7 +189,7 @@ final class SettingsStore: SettingsProviding, @unchecked Sendable {
 
     func setCustom(baseUrl: String, chatModel: String, vlModel: String, apiKey: String?) {
         providerId = "custom"
-        customBaseUrl = trimTrailingSlash(baseUrl.trimmingCharacters(in: .whitespacesAndNewlines))
+        customBaseUrl = normalizedBase(baseUrl)
         customChatModel = chatModel.trimmingCharacters(in: .whitespacesAndNewlines)
         customVlModel = vlModel.trimmingCharacters(in: .whitespacesAndNewlines)
         if let apiKey, !apiKey.isEmpty { setApiKey(apiKey, for: "custom") }
@@ -205,5 +204,14 @@ final class SettingsStore: SettingsProviding, @unchecked Sendable {
         var s = url
         while s.hasSuffix("/") { s.removeLast() }
         return s
+    }
+
+    /// 用户经常只填 `open.bigmodel.cn/api/paas/v4`（不带 https://）。
+    /// 这里补全 scheme，否则 URLSession 只会丢一句难懂的 "unsupported URL"。
+    private func normalizedBase(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return trimmed }
+        if trimmed.contains("://") { return trimTrailingSlash(trimmed) }
+        return trimTrailingSlash("https://" + trimmed)
     }
 }

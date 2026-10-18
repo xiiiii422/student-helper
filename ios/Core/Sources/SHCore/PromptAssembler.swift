@@ -146,6 +146,8 @@ public enum LlmError: Error, Equatable {
     case busy(String)
     case noFirstToken
     case empty(String)
+    /// 设置页的 Base URL 拼出来的地址不是合法 URL（用户手改错一个字就会命中）
+    case badBaseURL(String)
 
     /// 与安卓 IllegalStateException 文案对齐，UI 侧的友好化映射两边共用同一份。
     public var message: String {
@@ -155,6 +157,7 @@ public enum LlmError: Error, Equatable {
         case .busy(let last): return "模型服务繁忙（\(last)），请稍后重试"
         case .noFirstToken: return "\(LlmPolicy.firstTokenBudgetSeconds)s 内没等到首个字词"
         case .empty(let raw): return raw.isEmpty ? "响应提前结束，请重试" : raw
+        case .badBaseURL(let raw): return "接口地址格式不对：\(raw)，请到「模型服务设置」检查"
         }
     }
 }

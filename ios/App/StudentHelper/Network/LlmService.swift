@@ -149,8 +149,13 @@ public actor LlmService {
 
     // MARK: - 内部实现
 
-    private func request(_ cfg: LlmConfig, _ body: Data) -> URLRequest {
-        var req = URLRequest(url: URL(string: cfg.endpoint)!)
+    private func request(_ cfg: LlmConfig, _ body: Data) throws -> URLRequest {
+        // Base URL 是用户在设置页手填的，写错一个字符 URL 就构造不出来。
+        // 以前这里用 `URL(string:)!`：真机上输错地址直接闪退。
+        guard let url = URL(string: cfg.endpoint) else {
+            throw LlmError.badBaseURL(cfg.baseUrl)
+        }
+        var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("Bearer " + cfg.apiKey, forHTTPHeaderField: "Authorization")
         req.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
