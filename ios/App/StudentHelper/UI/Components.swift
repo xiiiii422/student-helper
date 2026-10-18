@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import SHCore
 
 /// 通用组件：大标题、子页导航、文字按钮、底栏。
@@ -93,6 +94,13 @@ struct Hairline: View {
 
 // MARK: - 底栏
 
+/// SF Symbol 名写错不会报错、只会渲染成空白，整排 tab 就会“串位”（数学那格曾经就是这样）。
+/// 这里按候选名逐个探测，取当前系统真能解析出来的第一个，最后兜一个通用图标。
+private func resolvedSymbol(_ candidates: [String]) -> String {
+    for name in candidates where UIImage(systemName: name) != nil { return name }
+    return candidates.last ?? "questionmark"
+}
+
 enum BottomTab: String, CaseIterable, Identifiable {
     case chinese, math, english, composition, me
     var id: String { rawValue }
@@ -108,23 +116,25 @@ enum BottomTab: String, CaseIterable, Identifiable {
     }
 
     /// 未选中细线 / 选中填充，与安卓双态图标一致。
+    /// 每个 tab 都给了多个候选名：SF Symbols 各版本增删过不少名字，
+    /// 例如 `calculator` 在部分系统里根本不存在，直接写死就会留一个空格子。
     var iconUnselected: String {
         switch self {
-        case .chinese: return "book.closed"
-        case .math: return "calculator"
-        case .english: return "textformat.abc"
-        case .composition: return "square.and.pencil"
-        case .me: return "person"
+        case .chinese: return resolvedSymbol(["book.closed", "book"])
+        case .math: return resolvedSymbol(["function", "x.squareroot", "sum", "divide"])
+        case .english: return resolvedSymbol(["textformat.abc", "character", "textformat"])
+        case .composition: return resolvedSymbol(["square.and.pencil", "pencil.and.outline", "pencil"])
+        case .me: return resolvedSymbol(["person", "person.crop.circle"])
         }
     }
 
     var iconSelected: String {
         switch self {
-        case .chinese: return "book.closed.fill"
-        case .math: return "calculator.fill"
-        case .english: return "textformat.abc.dottedunderline"
-        case .composition: return "square.and.pencil"
-        case .me: return "person.fill"
+        case .chinese: return resolvedSymbol(["book.closed.fill", "book.fill", "book.closed"])
+        case .math: return resolvedSymbol(["function", "x.squareroot", "sum", "divide"])
+        case .english: return resolvedSymbol(["textformat.abc.dottedunderline", "textformat.abc", "character"])
+        case .composition: return resolvedSymbol(["square.and.pencil", "pencil.and.outline", "pencil"])
+        case .me: return resolvedSymbol(["person.fill", "person.crop.circle.fill", "person"])
         }
     }
 
