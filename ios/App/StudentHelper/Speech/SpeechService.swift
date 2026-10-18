@@ -43,15 +43,17 @@ final class SpeechService: NSObject, ObservableObject {
     private let defaults: UserDefaults
     private var chunks: [SpeechText.Chunk] = []
     private var cursor = 0
+    /// 当前正在念的 utterance；代理回调靠它判断是不是过期回调
+    private var currentUtterance: AVSpeechUtterance?
 
     override init() {
         self.defaults = .standard
-        self.rate = (defaults.object(forKey: Self.rateKey) as? Float) ?? 0.45
+        self.rate = defaults.object(forKey: Self.rateKey) != nil ? defaults.float(forKey: Self.rateKey) : 0.45
         self.autoSpeak = (defaults.object(forKey: Self.autoKey) as? Bool) ?? false
         self.preferredVoice = defaults.string(forKey: Self.voiceKey)
         super.init()
         synthesizer.delegate = self
-        configureAudioSession()
+        // 音频会话改为「朗读时才激活」，见 activateSession()
     }
 
     // MARK: - 可用音色（给设置页的 picker 用）
@@ -84,6 +86,7 @@ final class SpeechService: NSObject, ObservableObject {
         guard !parsed.isEmpty else { return }
         chunks = parsed
         cursor = 0
+        activateSession()
         speakCurrent()
     }
 
@@ -104,6 +107,9 @@ final class SpeechService: NSObject, ObservableObject {
     }
 
     func stop() {
+        // 先把当前 utterance 置空，这样 stopSpeaking 触发的 didCancel 会被当成过期回调忽略，
+        // 不会把紧接着开始的新朗读状态清掉
+        currentUtterance = nil
         synthesizer.stopSpeaking(at: .immediate)
         chunks = []
         cursor = 0
@@ -111,6 +117,7 @@ final class SpeechService: NSObject, ObservableObject {
         isPaused = false
         spokenChunk = nil
         progress = nil
+        deactivateSession()
     }
 
     private func speakCurrent() {
@@ -119,6 +126,8 @@ final class SpeechService: NSObject, ObservableObject {
             isPaused = false
             spokenChunk = nil
             progress = nil
+            currentUtterance = nil
+            deactivateSession()
             return
         }
         let chunk = chunks[cursor]
@@ -133,6 +142,7 @@ final class SpeechService: NSObject, ObservableObject {
         isPaused = false
         spokenChunk = chunk.text
         progress = (cursor + 1, chunks.count)
+        currentUtterance = utterance
         synthesizer.speak(utterance)
     }
 
@@ -155,7 +165,8 @@ final class SpeechService: NSObject, ObservableObject {
         let candidates = AVSpeechSynthesisVoice.speechVoices()
             .filter { $0.language.replacingOccurrences(of: "_", with: "-").hasPrefix(wanted) }
         if #available(iOS 17.0, *) {
-            if let best = candidates.max(by: { quality($0) > quality($1) }) { return best }
+            // max(by:) 的闭包是「升序判断」，写 `>` 反而会选到质量最低的那个
+            if let best = candidates.max(by: { quality($0) < quality($1) }) { return best }
         }
         return candidates.first ?? AVSpeechSynthesisVoice(language: wanted)
     }
@@ -169,14 +180,22 @@ final class SpeechService: NSObject, ObservableObject {
         }
     }
 
-    private func configureAudioSession() {
+    /// 朗读前才激活音频会话：以前在 App 启动时就 setActive(true) 且从不释放，
+    /// 一开 App 就把用户的音乐压低（duckOthers），朗读结束也不恢复。
+    private func activateSession() {
         let session = AVAudioSession.sharedInstance()
-        // spokenAudio 模式会自动压低背景音乐，而不是直接停掉；.defaultToSpeaker 让插耳机/外放切换正常
-        try? session.setCategory(
-            .playback, mode: .spokenAudio,
-            options: [.duckOthers, .defaultToSpeaker, .mixWithOthers]
-        )
-        try? session.setActive(true, options: .notifyOthersOnDeactivation)
+        do {
+            // .playback 下 .defaultToSpeaker 是无效项，去掉；
+            // spokenAudio 会压低背景音乐而不是硬切，mixWithOthers 让切换更自然
+            try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers, .mixWithOthers])
+            try session.setActive(true)
+        } catch {
+            // 激活失败不该让朗读直接报废，系统仍可能出声
+        }
+    }
+
+    private func deactivateSession() {
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 }
 
@@ -187,6 +206,8 @@ extension SpeechService: AVSpeechSynthesizerDelegate {
     ) {
         Task { @MainActor [weak self] in
             guard let self else { return }
+            // 过期回调（已经切到下一句/已被 stop）直接忽略，否则会把新朗读的状态清掉
+            guard self.currentUtterance === utterance else { return }
             self.cursor += 1
             self.speakCurrent()
         }
@@ -197,9 +218,12 @@ extension SpeechService: AVSpeechSynthesizerDelegate {
     ) {
         Task { @MainActor [weak self] in
             guard let self else { return }
+            guard self.currentUtterance === utterance else { return }
+            self.currentUtterance = nil
             self.isSpeaking = false
             self.spokenChunk = nil
             self.progress = nil
+            self.deactivateSession()
         }
     }
 }

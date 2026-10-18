@@ -159,11 +159,13 @@ struct CameraPicker: UIViewControllerRepresentable {
 struct PhotoLibraryPicker: UIViewControllerRepresentable {
     let onPick: (URL) -> Void
     let onCancel: () -> Void
+    /// 一次最多选几张。聊天页只处理一张（多选会被 OCR guard 丢掉后几张），作文页给 4。
+    var limit: Int = 4
 
     func makeUIViewController(context: Context) -> PHPickerViewController {
         var config = PHPickerConfiguration()
         config.filter = .images
-        config.selectionLimit = 4
+        config.selectionLimit = limit
         let picker = PHPickerViewController(configuration: config)
         picker.delegate = context.coordinator
         return picker

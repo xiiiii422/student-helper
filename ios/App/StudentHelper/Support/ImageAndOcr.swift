@@ -153,13 +153,16 @@ enum FileStorage {
 
     /// 启动时清扫孤儿图片：数据库里已无人引用的文件一律删掉。
     /// 早期版本「删消息不删图」，靠这一步把历史泄漏收回来。
+    ///
+    /// - Parameter referenced: 仍然被引用的**文件名**集合（不是绝对路径）。
+    ///   用文件名是因为 App 容器路径会在重装/换机导入后变化，按路径比会误删全部图片。
     @discardableResult
     static func sweepOrphans(keeping referenced: Set<String>) -> Int {
         let files = (try? FileManager.default.contentsOfDirectory(
             at: imagesDirectory, includingPropertiesForKeys: nil
         )) ?? []
         var removed = 0
-        for file in files where !referenced.contains(file.path) {
+        for file in files where !referenced.contains(file.lastPathComponent) {
             if (try? FileManager.default.removeItem(at: file)) != nil { removed += 1 }
         }
         return removed

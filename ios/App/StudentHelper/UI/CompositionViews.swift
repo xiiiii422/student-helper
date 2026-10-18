@@ -324,15 +324,27 @@ struct CompositionNewView: View {
         .navigationTitle("新建作文")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showCamera) {
-            CameraPicker(
-                onCapture: { url in if let saved = FileStorage.persist(imageAt: url) { vm.addImage(saved) } },
-                onCancel: { showCamera = false }
-            )
-            .ignoresSafeArea()
+            // 无相机设备（或被「屏幕使用时间」限制）时强设 .camera 会抛异常，这里兜一层
+            if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                CameraPicker(
+                    onCapture: { url in
+                        showCamera = false
+                        if let saved = FileStorage.persist(imageAt: url) {
+                            vm.addImage(saved)
+                        } else {
+                            vm.error = "图片保存失败，请重试"
+                        }
+                    },
+                    onCancel: { showCamera = false }
+                )
+                .ignoresSafeArea()
+            } else {
+                UnavailableFeatureRow(text: "这台设备没有可用的相机。")
+            }
         }
         .sheet(isPresented: $showLibrary) {
             PhotoLibraryPicker(
-                onPick: { url in if let saved = FileStorage.persist(imageAt: url) { vm.addImage(saved) } },
+                onPick: { url in showLibrary = false; if let saved = FileStorage.persist(imageAt: url) { vm.addImage(saved) } },
                 onCancel: { showLibrary = false }
             )
             .ignoresSafeArea()

@@ -102,12 +102,18 @@ public enum Zip {
         let slice = data.subdata(in: endOffset..<data.count)
         guard slice.count >= 22 else { throw ZipError.truncated }
         let count = Int(read16(slice, 10))
-        let centralOffset = UInt32(read32(slice, 16))
-        var cursor = Int(centralOffset)
+        let centralOffset = Int(read32(slice, 16))
+        // 中央目录里的 count / offset 全部来自文件内容，属于不可信输入：
+        // 拿去当 Data.subdata 的区间会直接越界 trap（用户随便挑个 zip 导入就闪退）。
+        guard count > 0, count <= 10_000,
+              centralOffset >= 0, centralOffset + 46 <= data.count
+        else { throw ZipError.truncated }
+        var cursor = centralOffset
 
         var entries: [Entry] = []
         entries.reserveCapacity(count)
         for _ in 0..<count {
+            guard cursor >= 0, cursor + 46 <= data.count else { throw ZipError.truncated }
             let header = data.subdata(in: cursor..<(cursor + 46))
             guard header.count == 46, read32(header, 0) == 0x02014b50 else { throw ZipError.truncated }
             let method = read16(header, 10)
@@ -116,20 +122,26 @@ public enum Zip {
             let extraLength = Int(read16(header, 30))
             let commentLength = Int(read16(header, 32))
             let localHeaderOffset = Int(read32(header, 42))
+            guard nameLength >= 0, cursor + 46 + nameLength <= data.count else {
+                throw ZipError.truncated
+            }
             let nameRange = (cursor + 46)..<(cursor + 46 + nameLength)
-            guard nameRange.upperBound <= data.count else { throw ZipError.truncated }
             let name = String(data: data.subdata(in: nameRange), encoding: .utf8) ?? ""
 
             // 真实数据在本地头之后，本地头长度要重新解析（extra 字段长度与中央目录里那份可能不同）
+            guard localHeaderOffset >= 0, localHeaderOffset + 30 <= data.count else {
+                throw ZipError.truncated
+            }
             let local = data.subdata(in: localHeaderOffset..<(localHeaderOffset + 30))
             guard local.count == 30, read32(local, 0) == 0x04034b50 else { throw ZipError.badMagic }
             let localNameLen = Int(read16(local, 26))
             let localExtraLen = Int(read16(local, 28))
             let payloadStart = localHeaderOffset + 30 + localNameLen + localExtraLen
-            guard payloadStart + compressedSize <= data.count else { throw ZipError.truncated }
+            guard compressedSize >= 0, payloadStart >= 0,
+                  payloadStart + compressedSize <= data.count else { throw ZipError.truncated }
             var payload = data.subdata(in: payloadStart..<(payloadStart + compressedSize))
             if method == 8 {
-                // 本地头偏移 24 是 uncompressed size，拿它做输出缓冲的下界估计
+                // 本地头偏移 24 是 uncompressed size，只当容量提示；上限在 inflate 里夹紧
                 payload = try inflate(payload, expected: Int(read32(local, 24)))
             } else if method != 0 {
                 throw ZipError.unsupportedMethod(method)

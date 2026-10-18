@@ -17,8 +17,12 @@ enum RawDeflate {
     /// COMPRESSION_ZLIB 在 Apple 的 Compression 里就是裸 deflate 流。
     static func inflate(_ input: Data, expected: Int) throws -> Data {
         guard !input.isEmpty else { return Data() }
-        // 解压炸弹兜底：允许比声明的大小多出 1MB，超了直接判定损坏
-        let capacity = max(expected, 0) + 1_048_576
+        // 声明大小来自不可信的 zip 头：直接拿去 allocate 可能一次要 4GB 直接崩。
+        // 已知大小时按「声明 + 1MB 余量」分配，未知大小（data descriptor 写法）给 16MB。
+        let declared = max(expected, 0)
+        let capacity = declared > 0
+            ? min(declared + 1_048_576, 64 * 1024 * 1024)
+            : 16 * 1024 * 1024
         let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: capacity)
         defer { buffer.deallocate() }
 
@@ -30,7 +34,8 @@ enum RawDeflate {
                 nil, COMPRESSION_ZLIB
             )
         }
-        guard written > 0 else { throw Failure.corrupted }
+        // 缓冲区被填满说明真实内容比声明的大，按损坏处理，避免把截断数据当成功
+        guard written > 0, written < capacity else { throw Failure.corrupted }
         return Data(bytes: buffer, count: written)
     }
 }

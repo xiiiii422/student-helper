@@ -215,8 +215,13 @@ struct ChatView: View {
         if UIImagePickerController.isSourceTypeAvailable(.camera) {
             CameraPicker(
                 onCapture: { url in
+                    // 必须显式收起 sheet：只靠 UIKit dismiss 时 SwiftUI 绑定可能仍是 true，
+                    // 真机上表现为「拍完再点拍照没反应」。
+                    showCamera = false
                     if let saved = FileStorage.persist(imageAt: url) {
                         vm.processImage(at: saved)
+                    } else {
+                        vm.error = "图片保存失败，请重试"
                     }
                 },
                 onCancel: { showCamera = false }
@@ -230,11 +235,16 @@ struct ChatView: View {
     private var librarySheet: some View {
         PhotoLibraryPicker(
             onPick: { url in
+                showLibrary = false
                 if let saved = FileStorage.persist(imageAt: url) {
                     vm.processImage(at: saved)
+                } else {
+                    vm.error = "图片保存失败，请重试"
                 }
             },
-            onCancel: { showLibrary = false }
+            onCancel: { showLibrary = false },
+            // 聊天页一次只处理一张：processImage 有 ocrWorking 串行保护，选多了会被静默丢弃
+            limit: 1
         )
         .ignoresSafeArea()
     }

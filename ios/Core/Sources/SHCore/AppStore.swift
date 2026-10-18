@@ -135,6 +135,9 @@ public struct BackupSnapshot: Codable, Equatable {
 
 public final class AppStore {
 
+    /// 这次启动是否成功读到了已有数据库（解码失败时为 false，用于避免误删图片）
+    public private(set) var didLoadExistingData = false
+
     private let fileURL: URL
     private let now: () -> Int
     private(set) var snapshot: BackupSnapshot
@@ -148,6 +151,7 @@ public final class AppStore {
         if let data = try? Data(contentsOf: fileURL),
            let decoded = try? JSONDecoder().decode(BackupSnapshot.self, from: data) {
             self.snapshot = decoded
+            self.didLoadExistingData = true
         } else {
             self.snapshot = BackupSnapshot()
         }
@@ -175,7 +179,10 @@ public final class AppStore {
     // MARK: 消息
 
     public func messages(subject: String) -> [Message] {
-        snapshot.messages.filter { $0.subject == subject }.sorted { $0.createdAt < $1.createdAt }
+        snapshot.messages
+            .filter { $0.subject == subject }
+            // 同一毫秒插入的 user/assistant 用 id 兜底，否则顺序可能翻转（Swift sort 不稳定）
+            .sorted { ($0.createdAt, $0.id) < ($1.createdAt, $1.id) }
     }
 
     /// 讲题历史窗口：与安卓一样只带最近 16 条，且不含本轮这条提问。

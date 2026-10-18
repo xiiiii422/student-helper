@@ -240,7 +240,9 @@ final class ChatViewModel: ObservableObject {
             }
 
             // 一个字都没生成出来就恢复原答案，绝不能让「重新生成」把好答案弄丢
-            if accumulated.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let produced = accumulated.trimmingCharacters(in: .whitespacesAndNewlines)
+            if failure != nil || produced.isEmpty {
+                // 出错或没生成出东西：恢复原文，绝不让「重新生成」把好答案弄丢
                 self.store.update(Self.finalized(original, text: original.textContent, streaming: false))
             } else {
                 self.store.update(Self.finalized(original, text: accumulated, streaming: false))
@@ -272,6 +274,13 @@ final class ChatViewModel: ObservableObject {
     }
 
     func clearSubject() {
+        // 清空前先停掉正在跑的流，否则输入框会一直锁在“停止”状态，
+        // live 气泡还会继续往一个已经清空的页面上长
+        stopStreaming()
+        streaming = false
+        liveAssistantText = nil
+        statusHint = nil
+        sendFailure = nil
         speech.stop()
         for path in store.clearSubject(subject) { FileStorage.delete(path: path) }
         reload()

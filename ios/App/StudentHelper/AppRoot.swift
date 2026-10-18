@@ -130,13 +130,20 @@ final class AppContainer: ObservableObject {
         }
 
         // 清扫孤儿图片：早期版本删消息/清空学科时不删图片文件，靠这一步把存量泄漏收回来。
-        // 引用集合来自消息与作文两处；不在集合里的文件一律删除。
-        let referenced = Set(
-            store.backupSnapshot.messages.compactMap(\.imageUri)
-                + store.backupSnapshot.compositions.flatMap(\.imageUriList)
-        )
-        let removed = FileStorage.sweepOrphans(keeping: referenced)
-        if removed > 0 { print("[FileStorage] 清理孤儿图片 \(removed) 张") }
+        //
+        // 两个保险：
+        // 1. 只有数据库成功读出来才清扫——解码失败时会得到空快照，照着清会把用户的图全删光；
+        // 2. 按「文件名」比对而不是绝对路径——导入别的设备/重装后容器路径会变，
+        //    按路径比会把所有图都判成孤儿。
+        if store.didLoadExistingData {
+            let referenced = Set(
+                (store.backupSnapshot.messages.compactMap(\.imageUri)
+                    + store.backupSnapshot.compositions.flatMap(\.imageUriList))
+                    .map { ($0 as NSString).lastPathComponent }
+            )
+            let removed = FileStorage.sweepOrphans(keeping: referenced)
+            if removed > 0 { print("[FileStorage] 清理孤儿图片 \(removed) 张") }
+        }
     }
 
     private static func landing(for screen: UITestScreen) -> (BottomTab, Route?) {
