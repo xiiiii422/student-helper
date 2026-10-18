@@ -72,8 +72,14 @@ enum OcrService {
                 }
                 request.recognitionLevel = .accurate
                 request.usesLanguageCorrection = true
-                // 只列中英两种：写多了会让 Vision 在标点与数字上乱猜
-                request.recognitionLanguages = ["zh-Hans", "en-US"]
+                // 不要把语言写死：某些 iOS 版本/机型并不支持其中某个 tag，
+                // 直接赋值可能让整次识别失败（表现就是「识别不出东西」）。
+                // 先问系统支持哪些，再取交集；一个都不支持就保持系统默认。
+                let wanted = ["zh-Hans", "en-US", "zh-Hant"]
+                if let supported = try? request.supportedRecognitionLanguages(), !supported.isEmpty {
+                    let usable = wanted.filter { supported.contains($0) }
+                    if !usable.isEmpty { request.recognitionLanguages = usable }
+                }
                 let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
                 do {
                     try handler.perform([request])

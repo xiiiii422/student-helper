@@ -48,7 +48,7 @@ struct OcrConfirmSheet: View {
                         Text("怎么问")
                             .font(HyperType.labelLarge)
                             .foregroundStyle(palette.textSecondary)
-                        ForEach([SendMode.textOnly, .textAndImage], id: \.self) { option in
+                        ForEach([SendMode.textOnly, .textAndImage, .imageOnly], id: \.self) { option in
                             modeRow(option)
                         }
                         Text(footnote)
@@ -67,7 +67,11 @@ struct OcrConfirmSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("发送") { onSend(text, mode) }
-                        .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        // 「只发图片」模式下允许文字留空
+                        .disabled(
+                            mode != .imageOnly
+                                && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        )
                 }
             }
         }
@@ -108,6 +112,7 @@ struct OcrConfirmSheet: View {
         switch mode {
         case .textOnly: return "只发文字：更快更省，适合识别结果已经完整的情况。"
         case .textAndImage: return "连原图一起发：老师会先看图片原貌，识别漏了也能补上。"
+        case .imageOnly: return "只发图片：识别结果不可信时用这个，老师完全靠看图讲。"
         }
     }
 

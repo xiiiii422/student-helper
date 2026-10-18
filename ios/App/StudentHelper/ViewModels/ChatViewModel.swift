@@ -218,11 +218,19 @@ final class ChatViewModel: ObservableObject {
                 return
             }
             let recognized = await OcrService.recognize(image: compressed)
+            // 分学科决策（规则在 SHCore.OcrRouter，与安卓同一套）：
+            // 数学几乎总要带图——本地认不出分式/根号，且手写数字错一位整题就讲歪；
+            // 语文/英语的多行长题也要带图；只有干净的高置信度短文本才走纯文字。
+            let decided = OcrRouter.decide(
+                text: recognized.text,
+                confidence: recognized.confidence,
+                subject: self.subject
+            )
             self.pendingOcr = PendingOcr(
                 imageUri: url.path,
                 text: recognized.text,
                 confidence: recognized.confidence,
-                suggestedMode: recognized.confidence >= 0.75 ? .textOnly : .textAndImage,
+                suggestedMode: SendMode(decided),
                 imageBase64: base64
             )
         }
@@ -232,11 +240,14 @@ final class ChatViewModel: ObservableObject {
     func confirmPendingSend(text: String, mode: SendMode) {
         guard let pending = pendingOcr else { return }
         pendingOcr = nil
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // 「只看图」模式下识别文字常常是空的，得补一句人话，否则等于发了条空白提问
+        let prompt = (mode == .imageOnly && trimmed.isEmpty) ? "请帮我看看图片里的这道题" : text
         launchSend(
-            userText: text,
+            userText: prompt,
             imageUri: pending.imageUri,
-            imageBase64: mode == .textAndImage ? pending.imageBase64 : nil,
-            ocrConfidence: pending.confidence
+            imageBase64: mode == .textOnly ? nil : pending.imageBase64,
+            ocrConfidence: mode == .imageOnly ? nil : pending.confidence
         )
     }
 }
@@ -257,11 +268,22 @@ enum SendMode: Hashable {
     case textOnly
     /// 文字 + 原图一起发，交给视觉通道（题目是图片排版时更准）
     case textAndImage
+    /// 识别结果不可信，只发图让模型自己看
+    case imageOnly
+
+    init(_ mode: OcrMode) {
+        switch mode {
+        case .textOnly: self = .textOnly
+        case .textAndImage: self = .textAndImage
+        case .imageOnly: self = .imageOnly
+        }
+    }
 
     var label: String {
         switch self {
         case .textOnly: return "只用识别出的文字"
         case .textAndImage: return "文字连同原图一起问"
+        case .imageOnly: return "只发图片，让老师自己看"
         }
     }
 }

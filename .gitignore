@@ -48,3 +48,6 @@ tools/_*
 
 shots_ios*/
 release/*.ipa
+
+# ���� OCR �����زģ�����ʵ��ҵ��Ƭ��������⣩
+ocr_poc/
