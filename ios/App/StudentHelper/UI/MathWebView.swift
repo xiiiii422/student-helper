@@ -1,5 +1,6 @@
 import SwiftUI
 import WebKit
+import SHCore
 
 /// 含 LaTeX 的讲稿渲染：WKWebView + 本地 KaTeX，高度按内容自适应。
 ///
@@ -28,7 +29,7 @@ struct MathWebView: UIViewRepresentable {
         web.showsVerticalScrollIndicator = false
         web.allowsLinkPreview = false
         #if DEBUG
-        web.isInspectable = true
+        if #available(iOS 16.4, *) { web.isInspectable = true }
         #endif
         web.navigationDelegate = context.coordinator
         context.coordinator.onHeight = onHeight

@@ -1,4 +1,5 @@
 import Foundation
+import SHCore
 
 /// 云构建截图用的「确定性界面」入口。
 ///

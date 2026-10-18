@@ -1,5 +1,7 @@
 import Foundation
 import SwiftUI
+import UIKit
+import SHCore
 
 /// 三科聊天页的状态容器，行为逐条对齐安卓 `ui/shared/ChatViewModel.kt`
 /// + `data/repository/ChatRepository.kt`。

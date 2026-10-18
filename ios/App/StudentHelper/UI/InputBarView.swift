@@ -1,13 +1,15 @@
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
+import PhotosUI
+import SHCore
 
 /// 输入栏，逐条对齐安卓 `ui/components/InputBar.kt`：
 /// 左侧拍照 / 相册 / 手写三个入口，中间浅灰胶囊输入框，右侧圆形上箭头发送。
 /// 半透乳白底 + 发丝顶线，和底栏同一套材质。
 struct InputBarView: View {
     @Binding var text: String
-    let enabled: Boolean
+    let enabled: Bool
     let accent: Color
     var onTakePhoto: () -> Void = {}
     var onPickImage: () -> Void = {}
@@ -119,12 +121,10 @@ struct CameraPicker: UIViewControllerRepresentable {
 
         func imagePickerController(
             _ picker: UIImagePickerController,
-            didFinishWithMedia mediaType: MediaType,
-            info: [UIImagePickerController.InfoKey: Any]
+            didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
         ) {
             picker.dismiss(animated: true)
-            guard mediaType == .image,
-                  let image = info[.originalImage] as? UIImage,
+            guard let image = info[.originalImage] as? UIImage,
                   let url = Self.writeTemp(image) else {
                 parent.onCancel()
                 return
@@ -179,7 +179,7 @@ struct PhotoLibraryPicker: UIViewControllerRepresentable {
             // 拿到的是原始文件数据，HEIC 不用先转一道，也不会把整张原图读进内存
             for result in results {
                 let provider = result.itemProvider
-                guard provider.hasTransferableData(ofType: .image) else { continue }
+                guard provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) else { continue }
                 _ = provider.loadTransferable(type: Data.self) { object in
                     switch object {
                     case .success(let data):

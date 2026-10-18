@@ -1,6 +1,7 @@
 import AVFoundation
 import Combine
 import SwiftUI
+import SHCore
 
 /// 讲稿朗读服务：把 AI 的回答用接近真人的语速、音色念出来。
 ///
@@ -69,7 +70,6 @@ final class SpeechService: NSObject, ObservableObject {
             switch voice.quality {
             case .premium: return 4
             case .enhanced: return 3
-            case .siri: return 2
             default: return 1
             }
         }
@@ -165,17 +165,16 @@ final class SpeechService: NSObject, ObservableObject {
         switch voice.quality {
         case .premium: return 4
         case .enhanced: return 3
-        case .siri: return 2
         default: return 1
         }
     }
 
     private func configureAudioSession() {
         let session = AVAudioSession.sharedInstance()
-        // spokenAudio 模式会自动压低背景音乐，而不是直接停掉；.defaultToOutputs 让插耳机/外放切换正常
+        // spokenAudio 模式会自动压低背景音乐，而不是直接停掉；.defaultToSpeaker 让插耳机/外放切换正常
         try? session.setCategory(
             .playback, mode: .spokenAudio,
-            options: [.duckOthers, .defaultToOutputs, .mixWithOthers]
+            options: [.duckOthers, .defaultToSpeaker, .mixWithOthers]
         )
         try? session.setActive(true, options: .notifyOthersOnDeactivation)
     }

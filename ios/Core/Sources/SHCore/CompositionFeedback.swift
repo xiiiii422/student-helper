@@ -29,7 +29,7 @@ public struct ScoreBreakdown: Codable, Equatable {
     }
 }
 
-public struct StrengthItem: Codable, Equatable, Identifiable {
+public struct StrengthItem: Codable, Hashable, Identifiable {
     public var location: String = ""
     public var content: String = ""
     public var why: String = ""
@@ -49,7 +49,7 @@ public struct StrengthItem: Codable, Equatable, Identifiable {
     }
 }
 
-public struct IssueItem: Codable, Equatable, Identifiable {
+public struct IssueItem: Codable, Hashable, Identifiable {
     public var location: String = ""
     public var type: String = ""
     public var original: String = ""
@@ -75,7 +75,7 @@ public struct IssueItem: Codable, Equatable, Identifiable {
     }
 }
 
-public struct RewriteItem: Codable, Equatable, Identifiable {
+public struct RewriteItem: Codable, Hashable, Identifiable {
     public var original: String = ""
     public var rewritten: String = ""
     public var why: String = ""

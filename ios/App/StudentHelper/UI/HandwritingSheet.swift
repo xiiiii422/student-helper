@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import SHCore
 
 /// 手写输入板：手指写一道题，识别成文字填回输入框。
 /// 对齐安卓 `ui/components/HandwritingCanvas.kt` 的用途 —— 有些题目学生打不出字

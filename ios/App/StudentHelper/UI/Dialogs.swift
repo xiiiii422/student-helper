@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import SHCore
 
 /// OCR 确认弹窗，对齐安卓 `ui/components/OcrConfirmDialog.kt`：
 /// 识别结果可编辑、可重识别、并让用户决定「只发文字」还是「文字连原图一起发」。

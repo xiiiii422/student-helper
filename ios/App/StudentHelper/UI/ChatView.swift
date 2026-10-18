@@ -1,4 +1,6 @@
 import SwiftUI
+import UIKit
+import SHCore
 
 /// 三科共用聊天页，对齐安卓 `ui/shared/ChatScreen.kt`：
 /// 大标题、iMessage 气泡、空态例题、失败常驻卡片、追问快捷入口、流式吸底。
@@ -62,7 +64,10 @@ struct ChatView: View {
                 vm.pendingOcr = nil
             }
         }
-        .fullScreenCover(item: $previewUri.asIdentifiable) { item in
+        .fullScreenCover(item: Binding<IdentifiableString?>(
+            get: { previewUri.asIdentifiable },
+            set: { if $0 == nil { previewUri = nil } }
+        )) { item in
             PreviewImageView(uri: item.value, onClose: { previewUri = nil })
         }
         .confirmationDialog(
@@ -74,7 +79,7 @@ struct ChatView: View {
         } message: {
             Text("只清本学科的对话与对应收藏，作文与其它学科不受影响。")
         }
-        .alert("删除这条消息？", isPresented: $deleteDialogShown) {
+        .alert("删除这条消息？", isPresented: deleteDialogShown) {
             Button("删除", role: .destructive) {
                 if let id = pendingDelete?.id { vm.deleteMessage(id: id) }
                 pendingDelete = nil

@@ -1,4 +1,6 @@
 import SwiftUI
+import UIKit
+import SHCore
 
 /// 模型服务设置，对齐安卓 `ui/me/SettingsScreen.kt`：
 /// 供应商预设 + 接口地址 / Key / 两个模型名 + 保存 / 连接测试 + 底部说明。
@@ -120,7 +122,7 @@ struct SettingsView: View {
 
     private func field(
         _ label: String, text: Binding<String>,
-        placeholder: String = "", keyboard: TextInputKeyboardType = .default
+        placeholder: String = "", keyboard: UIKeyboardType = .default
     ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label).font(HyperType.footnote).foregroundStyle(palette.textSecondary)

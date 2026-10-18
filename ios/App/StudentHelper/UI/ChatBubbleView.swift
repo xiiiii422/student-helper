@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import SHCore
 
 /// 消息气泡，逐条对齐安卓 `ui/components/ChatBubble.kt`：
 /// 用户=品牌蓝实底白字右下小尖，AI=浅灰底黑字左下小尖，流式带光标，定稿后数学走 KaTeX。

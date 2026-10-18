@@ -1,5 +1,7 @@
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
+import SHCore
 
 /// 「我的」页状态：连接测试的并发结果与进行中标志。
 @MainActor
@@ -104,7 +106,10 @@ struct MeView: View {
         .sheet(isPresented: $showImporter) {
             DocumentImporter { url in vm.importBackup(from: url) }
         }
-        .sheet(item: $vm.exportUrl.asIdentifiableURL) { item in
+        .sheet(item: Binding<IdentifiableURL?>(
+            get: { vm.exportUrl.asIdentifiableURL },
+            set: { if $0 == nil { vm.exportUrl = nil } }
+        )) { item in
             ShareSheet(items: [item.value])
         }
         .alert("学习小助手", isPresented: $showAbout) {
@@ -215,7 +220,7 @@ struct MeView: View {
 
 // MARK: - 行组件
 
-private struct ThemeChip: View {
+struct ThemeChip: View {
     let label: String
     let selected: Bool
     let action: () -> Void

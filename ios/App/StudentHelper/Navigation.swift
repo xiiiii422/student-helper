@@ -1,4 +1,5 @@
 import SwiftUI
+import SHCore
 
 /// 子路由。安卓用 Navigation Compose 的字符串路由，iOS 侧对应一个枚举，
 /// 好处是编译期就能挡住拼错的目的地。

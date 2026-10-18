@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import SHCore
 
 // MARK: - 应用入口
 
@@ -357,15 +358,8 @@ enum BackupService {
 
 // MARK: - 小工具
 
-extension URL {
-    func startAccessingSecurityScopedResource() -> Bool {
-        (self as NSURL).startAccessingSecurityScopedResource()
-    }
-
-    func stopAccessingSecurityScopedResource() {
-        (self as NSURL).stopAccessingSecurityScopedResource()
-    }
-}
+// Foundation 自带 URL.startAccessingSecurityScopedResource()/stopAccessingSecurityScopedResource()，
+// 原代码又声明了一遍（invalid redeclaration），已删除。
 
 extension Optional where Wrapped == URL {
     var asIdentifiableURL: IdentifiableURL? {

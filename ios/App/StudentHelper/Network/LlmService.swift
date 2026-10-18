@@ -1,4 +1,5 @@
 import Foundation
+import SHCore
 
 /// 跨主备两轮传递的「已经吐过字」标志。
 /// 已吐字之后不许重发，否则学生看到重复段落；actor 之间传引用需要这个装箱。

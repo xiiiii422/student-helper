@@ -1,4 +1,5 @@
 import SwiftUI
+import SHCore
 
 /// 通用组件：大标题、子页导航、文字按钮、底栏。
 /// 尺寸与配色逐条对齐安卓 `ui/components/IosComponents.kt` 与 `ui/navigation/AppBottomBar.kt`，

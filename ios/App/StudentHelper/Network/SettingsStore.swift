@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import SHCore
 
 /// Keychain 读写（kClass = generic password，按 service+account 定位）。
 ///

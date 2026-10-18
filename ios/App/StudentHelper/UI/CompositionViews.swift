@@ -1,4 +1,6 @@
 import SwiftUI
+import UIKit
+import SHCore
 
 /// 作文列表 + 新建 + 详情，对齐安卓 `ui/composition/*`。
 /// 详情页是批改结果的唯一出口，所以解析失败时必须能退回「显示原文」而不是白屏。

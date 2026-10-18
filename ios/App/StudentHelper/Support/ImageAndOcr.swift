@@ -2,6 +2,7 @@ import Foundation
 import ImageIO
 import UIKit
 import Vision
+import SHCore
 
 /// 图片压缩与 base64，对齐安卓 `core/util/BitmapUtils`。
 /// 上传给视觉模型前先降采样：手机直出 4000×3000 的图既慢又贵，题目文字 1280 长边足够看清。

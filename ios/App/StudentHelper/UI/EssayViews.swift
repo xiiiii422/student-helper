@@ -1,4 +1,6 @@
 import SwiftUI
+import UIKit
+import SHCore
 
 /// 批改结果详情，对齐安卓 `ui/components/FeedbackDetail.kt` 的分块顺序：
 /// 分项 → 总评 → 优点 → 问题 → 改进建议 → 好句升级 → 范文片段。

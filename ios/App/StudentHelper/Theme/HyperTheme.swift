@@ -1,4 +1,5 @@
 import SwiftUI
+import SHCore
 
 /// 小米澎湃 OS（HyperOS）色板与排版，逐一对齐安卓 `ui/theme/Color.kt`、`Type.kt`、`Shape.kt`、`Theme.kt`。
 /// 尺寸口径：安卓 1dp ≈ iOS 1pt，iPhone 14 逻辑分辨率 390×844，直接沿用同一批数字。

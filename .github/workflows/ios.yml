@@ -1,0 +1,171 @@
+name: iOS
+
+# 没有 Mac 的开发闭环靠这条流水线：
+#   1. 纯逻辑（排版 / SSE / 提示词 / 批改解析 / zip 备份）在 Linux 容器里跑 swift test —— 不花 macOS 额度
+#   2. 界面在 macOS runner 的无头 iPhone 14 模拟器里逐屏截图，产物回传，我读图判断
+#   3. 需要装机时才跑 ipa job
+# 因为私有仓的 macOS 分钟按 10 倍计费，push 不触发 screens/ipa，只有手动或打 tag 才跑。
+
+on:
+  workflow_dispatch:
+    inputs:
+      screens:
+        description: 要截的界面，空格分隔；all 表示全部
+        required: false
+        default: all
+  push:
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios.yml"
+    branches: [main]
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SCHEME: StudentHelper
+  BUNDLE_ID: com.example.studenthelper
+
+jobs:
+  # ───────────────────────── 纯逻辑：Linux，免费 ─────────────────────────
+  core-tests:
+    name: 核心逻辑单测 (Linux)
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.0-jammy
+    steps:
+      - uses: actions/checkout@v4
+      - name: swift test
+        working-directory: ios/Core
+        run: swift test --parallel
+
+  # ───────────────────────── 界面：macOS 模拟器截图 ─────────────────────────
+  screens:
+    name: iPhone 14 模拟器截图
+    # macos-14 镜像将于 2026-11-02 退役，改用 macos-15（Xcode 16 / iOS 18 SDK，
+    # 支持 iOS 16 部署目标）。见 github.blog/changelog/2026-10-01-...-retirement
+    runs-on: macos-15
+    needs: core-tests
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[ios-screens]')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 xcodegen
+        run: brew install xcodegen
+
+      - name: 生成工程
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: 构建模拟器包
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          xcodebuild build \
+            -project StudentHelper.xcodeproj \
+            -scheme "$SCHEME" \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath ./dd \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            GLM_API_KEY="${{ secrets.GLM_API_KEY }}" \
+            DEEPSEEK_API_KEY="${{ secrets.DEEPSEEK_API_KEY }}" \
+            | tail -40
+
+      - name: 启动模拟器并逐屏截图
+        run: |
+          set -euo pipefail
+          UDID=$(xcrun simctl list devices available -j \
+            | python3 -c "
+          import json,sys
+          data=json.load(sys.stdin)
+          for runtime, devs in sorted(data['devices'].items()):
+              if 'iOS' not in runtime: continue
+              for d in devs:
+                  if d['name'] == 'iPhone 14':
+                      print(d['udid']); sys.exit()
+          for runtime, devs in sorted(data['devices'].items()):
+              if 'iOS' not in runtime: continue
+              for d in devs:
+                  if d['isAvailable']:
+                      print(d['udid']); sys.exit()
+          sys.exit('没有可用的 iOS 模拟器')
+          ")
+          echo "UDID=$UDID"
+          xcrun simctl boot "$UDID"
+          # 状态栏时间固定，避免两次截图只因分钟数不同就被判成回归
+          xcrun simctl status_bar "$UDID" override \
+            --time "9:41" --batteryState charged --batteryLevel 100 --cellBarsLevel 4 \
+            --wifiBarsLevel 3 --carrierName ""
+
+          APP="ios/dd/Build/Products/Debug-iphonesimulator/$SCHEME.app"
+          if [ ! -d "$APP" ]; then echo "找不到构建产物 $APP"; exit 1; fi
+          xcrun simctl install "$UDID" "$APP"
+
+          mkdir -p shots
+          REQUESTED="${{ github.event.inputs.screens || 'all' }}"
+          if [ "$REQUESTED" = "all" ]; then
+            SCREENS="chatEmpty chatMath chatChinese chatEnglish compositionEmpty compositionDetail favorites settings me essay"
+          else
+            SCREENS="$REQUESTED"
+          fi
+
+          for name in $SCREENS; do
+            echo "=== $name ==="
+            xcrun simctl terminate "$UDID" "$BUNDLE_ID" 2>/dev/null || true
+            xcrun simctl launch "$UDID" "$BUNDLE_ID" -uiTestScreen "$name"
+            # KaTeX 是异步渲染 + 两次量高，给足时间否则截到半成品
+            sleep 7
+            xcrun simctl io "$UDID" screenshot "shots/$name.png"
+          done
+
+      - name: 上传截图
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: iphone14-screens
+          path: shots/*.png
+          if-no-files-found: error
+
+  # ───────────────────────── 装机包 ─────────────────────────
+  ipa:
+    name: 构建 ipa
+    runs-on: macos-15
+    needs: core-tests
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 生成工程
+        working-directory: ios
+        run: |
+          # macOS runner 自带 Homebrew；此前这里引用了一个不存在的 action
+          # （oven-sh/setup-brew@v1），会让整个 job 在第一步就失败。
+          [ -x "$(command -v xcodegen)" ] || brew install xcodegen
+          xcodegen --version
+          xcodegen generate
+
+      - name: 无签名构建（自用侧载：由 Sideloadly/AltServer 在本地签名）
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          xcodebuild build \
+            -project StudentHelper.xcodeproj -scheme "$SCHEME" \
+            -configuration Release -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath ./dd \
+            CODE_SIGNING_ALLOWED=NO \
+            GLM_API_KEY="${{ secrets.GLM_API_KEY }}" \
+            DEEPSEEK_API_KEY="${{ secrets.DEEPSEEK_API_KEY }}"
+          mkdir -p out/Payload
+          cp -R dd/Build/Products/Release-iphoneos/$SCHEME.app out/Payload/
+          (cd out && zip -qr "$SCHEME-unsigned.ipa" Payload)
+          mv out/$SCHEME-unsigned.ipa ./
+
+      - name: 上传 ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: iphone-ipa
+          path: ${{ env.SCHEME }}-unsigned.ipa
