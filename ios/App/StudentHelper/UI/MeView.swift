@@ -13,6 +13,8 @@ final class MeViewModel: ObservableObject {
     @Published var message: String?
     @Published var exportUrl: URL?
     @Published var importDone = false
+    /// 选好备份文件后先挂起，等用户确认「会覆盖现有数据」再真正导入
+    @Published var pendingImportUrl: URL?
 
     private let llm: LlmService
     private let store: AppStore
@@ -63,14 +65,34 @@ final class MeViewModel: ObservableObject {
     }
 
     func importBackup(from url: URL) {
+        // 导入是整体替换，先把文件挂起，由界面上确认后再动手——否则误点一下就没了
+        pendingImportUrl = url
+    }
+
+    func confirmImport() {
+        guard let url = pendingImportUrl else { return }
+        pendingImportUrl = nil
         do {
             try BackupService.importArchive(from: url, store: store)
             importDone = true
-            message = "导入完成，重启后生效"
+            // 导入后 onChange 会立刻刷新界面，不需要重启
+            message = "导入完成，已用备份数据替换本机内容"
             Haptics.success()
         } catch {
             message = "导入失败：\(error.localizedDescription)"
+            Haptics.warning()
         }
+    }
+
+    /// 「我的」顶部的存储概览：让家长知道占了多少空间。
+    var storageSummary: String {
+        let snap = store.backupSnapshot
+        let imageCount = (try? FileManager.default.contentsOfDirectory(
+            at: FileStorage.imagesDirectory, includingPropertiesForKeys: nil
+        ))?.count ?? 0
+        let mb = Double(FileStorage.totalImageBytes) / 1024 / 1024
+        return "消息 \(snap.messages.count) 条 · 作文 \(snap.compositions.count) 篇 · "
+            + "图片 \(imageCount) 张（\(String(format: "%.1f", mb)) MB）"
     }
 
     func clearAll() {
@@ -123,6 +145,15 @@ struct MeView: View {
         } message: {
             Text("将删除所有消息、作文、错题与图片，且不可恢复。建议先导出备份。")
         }
+        .alert("导入会覆盖当前数据", isPresented: Binding(
+            get: { vm.pendingImportUrl != nil },
+            set: { if !$0 { vm.pendingImportUrl = nil } }
+        )) {
+            Button("覆盖导入", role: .destructive) { vm.confirmImport() }
+            Button("取消", role: .cancel) { vm.pendingImportUrl = nil }
+        } message: {
+            Text("导入会用备份里的数据整体替换本机现有的消息、作文和错题，不可撤销。建议先导出一次当前数据。")
+        }
     }
 
     // MARK: 分组
@@ -135,6 +166,9 @@ struct MeView: View {
             Text("自用版 · 数据仅存本机")
                 .font(HyperType.bodyMedium)
                 .foregroundStyle(palette.textSecondary)
+            Text(vm.storageSummary)
+                .font(HyperType.footnote)
+                .foregroundStyle(palette.textTertiary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(20)
