@@ -170,6 +170,95 @@ final class ChatViewModel: ObservableObject {
         return m
     }
 
+    /// 重新生成某一条回答：用它前面那条提问重跑一遍，流式结果直接替换这条消息。
+    /// 与 `retryLast` 的区别：不删消息、不动其它对话，任意一条旧回答都能重讲。
+    func regenerate(messageId: Int) {
+        guard !streaming else { return }
+        let rows = store.messages(subject: subject)
+        guard let targetIndex = rows.firstIndex(where: { $0.id == messageId }),
+              rows[targetIndex].role == "assistant",
+              let userIndex = rows[..<targetIndex].lastIndex(where: { $0.role == "user" })
+        else { return }
+
+        let original = rows[targetIndex]
+        let question = rows[userIndex]
+        // 只用这条提问之前的历史，并把旧答案排除在外——否则模型会被自己上一次的答案带跑
+        let history = rows[..<userIndex].suffix(16).map { Msg($0.role, $0.textContent) }
+        let images = [question.imageUri.flatMap { ImageCodec.base64FromFile(path: $0) }].compactMap { $0 }
+
+        streaming = true
+        liveAssistantText = nil
+        sendFailure = nil
+        statusHint = nil
+        speech.stop()
+
+        var placeholder = original
+        placeholder.textContent = ""
+        placeholder.isStreaming = true
+        store.update(placeholder)
+        reload()
+
+        streamTask = Task { [weak self] in
+            guard let self else { return }
+            var accumulated = ""
+            var lastFlush = UInt64(0)
+            var failure: String?
+
+            let signals = LlmService.Signals(
+                onRetry: { attempt, max in
+                    Task { @MainActor [weak self] in
+                        self?.statusHint = "模型服务繁忙，正在重试（\(attempt)/\(max)）"
+                    }
+                },
+                onFallback: { label in
+                    Task { @MainActor [weak self] in
+                        self?.statusHint = "当前供应商限流，已切换到\(label)"
+                    }
+                }
+            )
+
+            do {
+                let stream = await self.llm.chatStream(
+                    subject: self.subject, userText: question.textContent,
+                    history: Array(history), imagesBase64: images, signals: signals
+                )
+                for try await delta in stream {
+                    accumulated += delta
+                    if self.statusHint != nil { self.statusHint = nil }
+                    let now = DispatchTime.now().uptimeNanoseconds
+                    if now - lastFlush >= Self.flushIntervalNanos {
+                        lastFlush = now
+                        self.store.update(Self.finalized(placeholder, text: accumulated, streaming: true))
+                    }
+                }
+            } catch is CancellationError {
+                // 用户点了停止：保留已生成的部分
+            } catch {
+                failure = LlmPolicy.friendlyError(
+                    (error as? LlmError)?.message ?? error.localizedDescription
+                )
+            }
+
+            // 一个字都没生成出来就恢复原答案，绝不能让「重新生成」把好答案弄丢
+            if accumulated.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                self.store.update(Self.finalized(original, text: original.textContent, streaming: false))
+            } else {
+                self.store.update(Self.finalized(original, text: accumulated, streaming: false))
+            }
+            self.streaming = false
+            self.statusHint = nil
+            self.sendFailure = nil
+            self.reload()
+            if let failure {
+                self.error = "重新生成失败：\(failure)"
+                Haptics.warning()
+            } else {
+                Haptics.success()
+                if self.speech.autoSpeak { self.speech.speak(accumulated) }
+            }
+        }
+    }
+
     func stopStreaming() {
         streamTask?.cancel()
     }

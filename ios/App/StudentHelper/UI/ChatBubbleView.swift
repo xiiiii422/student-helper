@@ -24,6 +24,8 @@ struct ChatBubbleView: View {
     var isSpeakingThis: Bool = false
     var onImageClick: (() -> Void)? = nil
     var onDelete: (() -> Void)? = nil
+    /// 重新生成这条回答（用前面的提问重跑，结果原地替换）
+    var onRegenerate: (() -> Void)? = nil
 
     @Environment(\.hyperPalette) private var palette
     /// 缩略图异步解码结果（先占位、后填图，避免主线程解大图）
@@ -163,6 +165,11 @@ struct ChatBubbleView: View {
             if let onToggleFavorite {
                 Button { onToggleFavorite() } label: {
                     Label(isFavorited ? "取消收藏" : "加入收藏", systemImage: "heart")
+                }
+            }
+            if let onRegenerate {
+                Button { onRegenerate() } label: {
+                    Label("重新生成", systemImage: "arrow.clockwise")
                 }
             }
         }

@@ -83,6 +83,15 @@ struct ChatView: View {
         } message: {
             Text("收藏过这条的话，收藏记录也会一起删除，不可恢复。")
         }
+        // vm.error 以前只赋值、没有任何地方展示（图片读取失败会静默），这里补上提示
+        .alert("提示", isPresented: Binding(
+            get: { vm.error != nil },
+            set: { if !$0 { vm.error = nil } }
+        )) {
+            Button("好", role: .cancel) { vm.error = nil }
+        } message: {
+            Text(vm.error ?? "")
+        }
     }
 
     private var deleteDialogShown: Binding<Bool> {
@@ -142,7 +151,9 @@ struct ChatView: View {
                             onCopy: { UIPasteboard.general.string = msg.textContent },
                             onSpeak: { vm.speak(msg.textContent) },
                             onImageClick: msg.imageUri.map { uri in { previewUri = uri } },
-                            onDelete: { pendingDelete = msg }
+                            onDelete: { pendingDelete = msg },
+                            onRegenerate: msg.role == "assistant"
+                                ? { vm.regenerate(messageId: msg.id) } : nil
                         )
                         .id(msg.id)
                     }
@@ -255,6 +266,7 @@ private struct BubbleRow: View {
     let onSpeak: () -> Void
     let onImageClick: (() -> Void)?
     let onDelete: () -> Void
+    var onRegenerate: (() -> Void)? = nil
 
     var body: some View {
         ChatBubbleView(
@@ -269,7 +281,8 @@ private struct BubbleRow: View {
             onSpeak: onSpeak,
             spokenChunk: spokenChunk,
             onImageClick: onImageClick,
-            onDelete: onDelete
+            onDelete: onDelete,
+            onRegenerate: message.role == "assistant" ? onRegenerate : nil
         )
     }
 }
