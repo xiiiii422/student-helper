@@ -31,7 +31,7 @@ enum ImageCodec {
 
     /// 从本地路径读图并编码；文件不存在或解码失败返回 nil（重试图片题时用到）。
     static func base64FromFile(path: String) -> String? {
-        guard let raw = UIImage(contentsOfFile: path) else { return nil }
+        guard let raw = UIImage(contentsOfFile: FileStorage.resolve(path)) else { return nil }
         return base64(from: compress(raw))
     }
 }
@@ -125,6 +125,22 @@ enum FileStorage {
 
     static func deleteAllImages() {
         try? FileManager.default.removeItem(at: imagesDirectory)
+    }
+
+    /// 把数据库里存的路径还原成当前沙盒里的真实路径。
+    ///
+    /// 数据库存的是绝对路径，而 iOS 的 App 容器路径在重装 / 迁移后会变
+    /// （免费签名 7 天到期要反复重装，很容易踩到）。绝对路径失效时，
+    /// 退回到「当前沙盒 images 目录 + 同名文件」，图片就不会凭空消失。
+    static func resolve(_ storedPath: String) -> String {
+        let path = storedPath.hasPrefix("file://")
+            ? (URL(string: storedPath)?.path ?? storedPath)
+            : storedPath
+        if FileManager.default.fileExists(atPath: path) { return path }
+        let name = (path as NSString).lastPathComponent
+        guard !name.isEmpty else { return path }
+        let candidate = imagesDirectory.appendingPathComponent(name).path
+        return FileManager.default.fileExists(atPath: candidate) ? candidate : path
     }
 
     /// 删掉单张图片（只允许删沙盒 images 目录里的，防止路径被写坏时误删别的文件）。
