@@ -39,12 +39,14 @@ struct ChatView: View {
                 text: $input,
                 enabled: !vm.streaming,
                 accent: accent,
+                isStreaming: vm.streaming,
                 onTakePhoto: { showCamera = true },
                 onPickImage: { showLibrary = true },
                 onSend: {
                     vm.sendText(input)
                     input = ""
-                }
+                },
+                onStop: { vm.stopStreaming() }
             )
         }
         .background(palette.background)

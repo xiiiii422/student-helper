@@ -22,6 +22,14 @@ on:
         description: 要截的界面，空格分隔；all 表示全部
         required: false
         default: all
+      appearance:
+        description: "模拟器外观（light / dark）"
+        required: false
+        default: light
+        type: choice
+        options:
+          - light
+          - dark
   push:
     paths:
       - "ios/**"
@@ -107,6 +115,8 @@ jobs:
           ")
           echo "UDID=$UDID"
           xcrun simctl boot "$UDID"
+          # 外观：截深色图时先切过去，否则截到的还是浅色
+          xcrun simctl ui "$UDID" appearance "${{ github.event.inputs.appearance || 'light' }}"
           # 状态栏时间固定，避免两次截图只因分钟数不同就被判成回归
           xcrun simctl status_bar "$UDID" override \
             --time "9:41" --batteryState charged --batteryLevel 100 --cellularBars 4 \
@@ -137,7 +147,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: iphone14-screens
+          name: iphone14-screens-${{ github.event.inputs.appearance || 'light' }}
           path: shots/*.png
           if-no-files-found: error
 

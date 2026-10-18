@@ -13,9 +13,12 @@ struct InputBarView: View {
     @Binding var text: String
     let enabled: Bool
     let accent: Color
+    /// 正在流式生成：发送按钮换成「停止」，点一下取消当前请求（已生成的部分会保留）
+    var isStreaming: Bool = false
     var onTakePhoto: () -> Void = {}
     var onPickImage: () -> Void = {}
     var onSend: () -> Void = {}
+    var onStop: () -> Void = {}
 
     @Environment(\.hyperPalette) private var palette
     @FocusState private var focused: Bool
@@ -64,6 +67,11 @@ struct InputBarView: View {
 
     private var sendButton: some View {
         Button {
+            if isStreaming {
+                Haptics.lightTap()
+                onStop()
+                return
+            }
             guard canSend else { return }
             Haptics.lightTap()
             focused = false
@@ -71,16 +79,16 @@ struct InputBarView: View {
         } label: {
             ZStack {
                 Circle()
-                    .fill(canSend ? palette.accent : palette.text.opacity(0.2))
+                    .fill(isStreaming ? palette.accent : (canSend ? palette.accent : palette.text.opacity(0.2)))
                     .frame(width: 34, height: 34)
-                Image(systemName: "arrow.up")
-                    .font(.system(size: 16, weight: .semibold))
+                Image(systemName: isStreaming ? "stop.fill" : "arrow.up")
+                    .font(.system(size: isStreaming ? 13 : 16, weight: .semibold))
                     .foregroundStyle(.white)
             }
         }
         .buttonStyle(.plain)
         .frame(width: 38, height: 38)
-        .accessibilityLabel("发送")
+        .accessibilityLabel(isStreaming ? "停止生成" : "发送")
     }
 
     private func icon(_ name: String, label: String, action: @escaping () -> Void) -> some View {
