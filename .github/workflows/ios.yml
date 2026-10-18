@@ -83,6 +83,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             GLM_API_KEY="${{ secrets.GLM_API_KEY }}" \
             DEEPSEEK_API_KEY="${{ secrets.DEEPSEEK_API_KEY }}" \
+            DEFAULT_PROVIDER="${{ secrets.DEFAULT_PROVIDER }}" \
             | tail -40
 
       - name: 启动模拟器并逐屏截图
@@ -170,7 +171,8 @@ jobs:
             -derivedDataPath ./dd \
             CODE_SIGNING_ALLOWED=NO \
             GLM_API_KEY="${{ secrets.GLM_API_KEY }}" \
-            DEEPSEEK_API_KEY="${{ secrets.DEEPSEEK_API_KEY }}"
+            DEEPSEEK_API_KEY="${{ secrets.DEEPSEEK_API_KEY }}" \
+            DEFAULT_PROVIDER="${{ secrets.DEFAULT_PROVIDER }}"
           mkdir -p out/Payload
           cp -R dd/Build/Products/Release-iphoneos/$SCHEME.app out/Payload/
           (cd out && zip -qr "$SCHEME-unsigned.ipa" Payload)
