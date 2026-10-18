@@ -245,11 +245,13 @@ enum LocalImage {
     }()
 
     private static func normalize(_ uri: String) -> String {
-        uri.hasPrefix("file://") ? (URL(string: uri)?.path ?? uri) : uri
+        // 容器路径可能在重装/迁移后变化，交给 FileStorage 统一兜底解析
+        FileStorage.resolve(uri)
     }
 
     private static func decode(_ path: String) -> UIImage? {
         if let image = UIImage(contentsOfFile: path) { return image }
+        // 最后再兜一层临时目录（相机直出的中转文件）
         return UIImage(contentsOfFile: NSTemporaryDirectory() + (path as NSString).lastPathComponent)
     }
 
