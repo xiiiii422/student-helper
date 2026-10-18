@@ -109,8 +109,8 @@ jobs:
           xcrun simctl boot "$UDID"
           # 状态栏时间固定，避免两次截图只因分钟数不同就被判成回归
           xcrun simctl status_bar "$UDID" override \
-            --time "9:41" --batteryState charged --batteryLevel 100 --cellBarsLevel 4 \
-            --wifiBarsLevel 3 --carrierName ""
+            --time "9:41" --batteryState charged --batteryLevel 100 --cellularBars 4 \
+            --wifiBars 3 --operatorName ""
 
           APP="ios/dd/Build/Products/Debug-iphonesimulator/$SCHEME.app"
           if [ ! -d "$APP" ]; then echo "找不到构建产物 $APP"; exit 1; fi
