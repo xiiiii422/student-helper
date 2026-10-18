@@ -137,6 +137,9 @@ struct ChatBubbleView: View {
                 }
                 .foregroundStyle(isFavorited ? palette.accent : palette.textSecondary)
             }
+            if let onRegenerate {
+                button(icon: "arrow.clockwise", label: "重新生成") { onRegenerate() }
+            }
         }
         .padding(.top, 1)
     }
