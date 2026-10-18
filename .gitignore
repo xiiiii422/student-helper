@@ -41,3 +41,6 @@ backend/**/*.env
 # 本地工具安装包（swift 工具链下载缓存）
 tools/swift-dl/
 tools/*.log
+
+# 临时草稿
+tools/_*
