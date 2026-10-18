@@ -103,7 +103,15 @@ final class SettingsStore: SettingsProviding, @unchecked Sendable {
     // MARK: 偏好
 
     var providerId: String {
-        get { defaults.string(forKey: Key.provider) ?? (Bundle.main.infoDictionary?["DefaultProvider"] as? String) ?? "glm" }
+        get {
+            // 空串也算“没配”：Info.plist 里的 $(DEFAULT_PROVIDER) 在 CI 未传值时会被展开成 ""，
+            // 而 `??` 只认 nil，会把 providerId 变成 ""，进而查不到 Key（装上看能打开、一提问就 401）。
+            if let stored = defaults.string(forKey: Key.provider), !stored.isEmpty { return stored }
+            if let bundled = Bundle.main.infoDictionary?["DefaultProvider"] as? String, !bundled.isEmpty {
+                return bundled
+            }
+            return "glm"
+        }
         set { defaults.set(newValue, forKey: Key.provider) }
     }
 
