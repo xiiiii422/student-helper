@@ -1,0 +1,427 @@
+import SwiftUI
+
+/// 三科共用聊天页，对齐安卓 `ui/shared/ChatScreen.kt`：
+/// 大标题、iMessage 气泡、空态例题、失败常驻卡片、追问快捷入口、流式吸底。
+struct ChatView: View {
+    @StateObject private var vm: ChatViewModel
+    let title: String
+    @Binding var tabSelection: BottomTab
+
+    @State private var input = ""
+    @State private var showCamera = false
+    @State private var showLibrary = false
+    @State private var showHandwriting = false
+    @State private var showClearConfirm = false
+    @State private var previewUri: String?
+    @State private var pendingDelete: Message?
+
+    @Environment(\.hyperPalette) private var palette
+
+    init(
+        title: String,
+        subject: String,
+        tabSelection: Binding<BottomTab>,
+        makeViewModel: @escaping (String) -> ChatViewModel
+    ) {
+        self.title = title
+        self._tabSelection = tabSelection
+        self._vm = StateObject(wrappedValue: makeViewModel(subject))
+    }
+
+    private var accent: Color { SubjectColor.forSubject(vm.subject) }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            content
+            InputBarView(
+                text: $input,
+                enabled: !vm.streaming,
+                accent: accent,
+                onTakePhoto: { showCamera = true },
+                onPickImage: { showLibrary = true },
+                onHandwriting: { showHandwriting = true },
+                onSend: {
+                    vm.sendText(input)
+                    input = ""
+                }
+            )
+        }
+        .background(palette.background)
+        .sheet(isPresented: $showCamera) { cameraSheet }
+        .sheet(isPresented: $showLibrary) { librarySheet }
+        .sheet(isPresented: $showHandwriting) {
+            HandwritingSheet { text in
+                input = input.isEmpty ? text : input + text
+            }
+        }
+        .sheet(item: $vm.pendingOcr) { pending in
+            OcrConfirmSheet(pending: pending) { text, mode in
+                vm.confirmPendingSend(text: text, mode: mode)
+            } onCancel: {
+                vm.pendingOcr = nil
+            }
+        }
+        .fullScreenCover(item: $previewUri.asIdentifiable) { item in
+            PreviewImageView(uri: item.value, onClose: { previewUri = nil })
+        }
+        .confirmationDialog(
+            "清空「\(title)」的全部对话？",
+            isPresented: $showClearConfirm, titleVisibility: .visible
+        ) {
+            Button("清空", role: .destructive) { vm.clearSubject() }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("只清本学科的对话与对应收藏，作文与其它学科不受影响。")
+        }
+        .alert("删除这条消息？", isPresented: $deleteDialogShown) {
+            Button("删除", role: .destructive) {
+                if let id = pendingDelete?.id { vm.deleteMessage(id: id) }
+                pendingDelete = nil
+            }
+            Button("取消", role: .cancel) { pendingDelete = nil }
+        } message: {
+            Text("收藏过这条的话，收藏记录也会一起删除，不可恢复。")
+        }
+    }
+
+    private var deleteDialogShown: Binding<Bool> {
+        Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } })
+    }
+
+    // MARK: 顶部
+
+    private var header: some View {
+        IosLargeTitle(
+            title: title,
+            actions: AnyView(
+                IosTextButton(text: "清空") { showClearConfirm = true }
+            )
+        )
+    }
+
+    // MARK: 主体
+
+    @ViewBuilder
+    private var content: some View {
+        if vm.messages.isEmpty && vm.liveAssistantText == nil {
+            EmptyChatState(title: title, accent: accent) { example in
+                input = example
+            }
+        } else {
+            ZStack(alignment: .top) {
+                messageList
+                if vm.ocrWorking {
+                    Text("识别中，请稍候")
+                        .font(HyperType.labelLarge)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                        .background(Capsule().fill(palette.card.opacity(0.94)))
+                        .overlay(Capsule().stroke(palette.divider, lineWidth: 0.5))
+                        .padding(.top, 8)
+                }
+            }
+        }
+    }
+
+    private var messageList: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(vm.messages.enumerated()), id: \.element.id) { index, msg in
+                        let showTime = AppStore.shouldShowTimestamp(vm.messages, index: index)
+                        if showTime {
+                            TimestampRow(text: Timestamp.format(msg.createdAt))
+                        }
+                        BubbleRow(
+                            message: msg,
+                            subject: vm.subject,
+                            isFavorited: vm.favoritedIds.contains(msg.id),
+                            spokenChunk: nil,
+                            onToggleFavorite: { vm.toggleFavorite(messageId: msg.id) },
+                            onCopy: { UIPasteboard.general.string = msg.textContent },
+                            onSpeak: { vm.speak(msg.textContent) },
+                            onImageClick: msg.imageUri.map { uri in { previewUri = uri } },
+                            onDelete: { pendingDelete = msg }
+                        )
+                        .id(msg.id)
+                    }
+
+                    if let live = vm.liveAssistantText {
+                        ChatBubbleView(
+                            role: "assistant",
+                            text: live,
+                            subject: vm.subject,
+                            isStreaming: true,
+                            statusHint: vm.statusHint
+                        )
+                        .id("streaming")
+                    }
+
+                    if let tail = vm.messages.last, !vm.streaming,
+                       vm.sendFailure != nil || tail.role == "user" {
+                        SendFailureRow(
+                            reason: vm.sendFailure ?? "上一次没能回答成功",
+                            onRetry: { vm.retryLast() }
+                        )
+                        .id("failure")
+                    }
+
+                    if !vm.streaming, let last = vm.messages.last,
+                       last.role == "assistant", !last.textContent.isEmpty {
+                        FollowUpRow { question in vm.sendText(question) }
+                            .id("followup")
+                    }
+
+                    Color.clear.frame(height: 8)
+                }
+                .padding(.vertical, 4)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .onChange(of: vm.liveAssistantText?.count ?? 0) { _ in
+                scrollToBottom(proxy)
+            }
+            .onChange(of: vm.messages.count) { _ in scrollToBottom(proxy) }
+            .onAppear { scrollToBottom(proxy) }
+        }
+    }
+
+    private func scrollToBottom(_ proxy: ScrollViewProxy) {
+        let target: AnyHashable
+        if vm.liveAssistantText != nil { target = "streaming" }
+        else if vm.sendFailure != nil { target = "failure" }
+        else { target = vm.messages.last?.id ?? "" }
+        withAnimation(.easeOut(duration: 0.18)) {
+            proxy.scrollTo(target, anchor: .bottom)
+        }
+    }
+
+    // MARK: 弹层
+
+    @ViewBuilder
+    private var cameraSheet: some View {
+        if UIImagePickerController.isSourceTypeAvailable(.camera) {
+            CameraPicker(
+                onCapture: { url in
+                    if let saved = FileStorage.persist(imageAt: url) {
+                        vm.processImage(at: saved)
+                    }
+                },
+                onCancel: { showCamera = false }
+            )
+            .ignoresSafeArea()
+        } else {
+            UnavailableFeatureRow(text: "这台设备没有可用的相机（模拟器不能拍照，请用真机）。")
+        }
+    }
+
+    private var librarySheet: some View {
+        PhotoLibraryPicker(
+            onPick: { url in
+                if let saved = FileStorage.persist(imageAt: url) {
+                    vm.processImage(at: saved)
+                }
+            },
+            onCancel: { showLibrary = false }
+        )
+        .ignoresSafeArea()
+    }
+}
+
+// MARK: - 子视图
+
+private struct TimestampRow: View {
+    let text: String
+    @Environment(\.hyperPalette) private var palette
+    var body: some View {
+        Text(text)
+            .font(HyperType.footnote)
+            .foregroundStyle(palette.textSecondary)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 10)
+            .padding(.bottom, 2)
+    }
+}
+
+/// 一条已定稿消息 + 操作行。
+private struct BubbleRow: View {
+    let message: Message
+    let subject: String
+    let isFavorited: Bool
+    let spokenChunk: String?
+    let onToggleFavorite: () -> Void
+    let onCopy: () -> Void
+    let onSpeak: () -> Void
+    let onImageClick: (() -> Void)?
+    let onDelete: () -> Void
+
+    var body: some View {
+        ChatBubbleView(
+            role: message.role,
+            text: message.textContent,
+            subject: subject,
+            imageUri: message.imageUri,
+            isStreaming: false,
+            isFavorited: isFavorited,
+            onToggleFavorite: message.role == "assistant" ? onToggleFavorite : nil,
+            onCopy: onCopy,
+            onSpeak: onSpeak,
+            spokenChunk: spokenChunk,
+            onImageClick: onImageClick,
+            onDelete: onDelete
+        )
+    }
+}
+
+/// 发送失败卡片：贴在 AI 气泡该在的位置。
+/// 失败不能只靠一闪而过的提示——学生抬头时只剩一个「问了没人回」的空对话。
+private struct SendFailureRow: View {
+    let reason: String
+    let onRetry: () -> Void
+    @Environment(\.hyperPalette) private var palette
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.bubble")
+                .font(.system(size: 18))
+                .foregroundStyle(palette.error)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("这条没能回答成功")
+                    .font(HyperType.titleMedium)
+                    .foregroundStyle(palette.text)
+                Text(reason)
+                    .font(HyperType.bodyMedium)
+                    .foregroundStyle(palette.textSecondary)
+                Button(action: onRetry) {
+                    Text("重试").font(HyperType.labelLarge).foregroundStyle(palette.accent)
+                }
+                .padding(.top, 2)
+            }
+            Spacer(minLength: 40)
+        }
+        .padding(14)
+        .background(
+            palette.error.opacity(palette.isDark ? 0.12 : 0.06),
+            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+        )
+        .padding(.horizontal, 14)
+        .padding(.vertical, 4)
+    }
+}
+
+/// 追问快捷入口：上一轮回答定稿后出现，横向可滚。
+private struct FollowUpRow: View {
+    let onAsk: (String) -> Void
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(ChatExamples.followUps, id: \.self) { question in
+                    Button { onAsk(question) } label: {
+                        Text(question)
+                            .font(.system(size: 13))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(
+                                Capsule().fill(Color(.secondarySystemBackground))
+                            )
+                            .overlay(Capsule().stroke(Color(.separator), lineWidth: 0.5))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+        }
+    }
+}
+
+/// 空态：与安卓 ChatScreen 的空态同一套文案与层级。
+struct EmptyChatState: View {
+    let title: String
+    let accent: Color
+    let onPick: (String) -> Void
+    @Environment(\.hyperPalette) private var palette
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                Spacer().frame(height: 60)
+                ZStack {
+                    Circle().fill(accent.opacity(0.12)).frame(width: 92, height: 92)
+                    Image(systemName: "questionmark.circle")
+                        .font(.system(size: 34, weight: .medium))
+                        .foregroundStyle(accent)
+                }
+                Text("向「\(title)」提问")
+                    .font(HyperType.title2)
+                    .foregroundStyle(palette.text)
+                    .padding(.top, 18)
+                Text("打字、拍照或手写题目都可以")
+                    .font(HyperType.bodyMedium)
+                    .foregroundStyle(palette.textSecondary)
+                    .padding(.top, 6)
+                Spacer().frame(height: 28)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("可以这样问")
+                        .font(HyperType.labelLarge)
+                        .foregroundStyle(palette.textSecondary)
+                        .padding(.leading, 6)
+                    ForEach(ChatExamples.forSubject(subjectKey), id: \.self) { example in
+                        Button { onPick(example) } label: {
+                            Text(example)
+                                .font(HyperType.body)
+                                .foregroundStyle(palette.text)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 14)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .fill(palette.card)
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .stroke(palette.divider, lineWidth: 0.5)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 14)
+                Spacer().frame(height: 40)
+            }
+        }
+    }
+
+    private var subjectKey: String {
+        if title == "语文" { return "chinese" }
+        if title == "英语" { return "english" }
+        return "math"
+    }
+}
+
+struct UnavailableFeatureRow: View {
+    let text: String
+    var body: some View {
+        VStack {
+            Text(text).font(HyperType.bodyMedium).padding(24)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemBackground))
+    }
+}
+
+// MARK: - 小工具
+
+/// Optional<String> 不能直接 .sheet(item:)，包一层 Identifiable。
+extension Optional where Wrapped == String {
+    var asIdentifiable: IdentifiableString? {
+        guard let self else { return nil }
+        return IdentifiableString(value: self)
+    }
+}
+
+struct IdentifiableString: Identifiable {
+    let value: String
+    var id: String { value }
+}

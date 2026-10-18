@@ -1,0 +1,43 @@
+# ── 构建产物 ──
+build/
+DerivedData/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+ios/App/StudentHelper.xcodeproj/
+ios/App/Generated/
+.release/
+release/*.mapping
+
+# XcodeGen：工程文件由 project.yml 现生成，不入库
+!ios/App/StudentHelper.xcodeproj
+
+# ── 密钥：绝不进 git 历史 ──
+# 安卓 Key 走 android/secrets.properties，iOS 走 Secrets.xcconfig 或 CI Secrets
+android/secrets.properties
+ios/Secrets.xcconfig
+*.p12
+*.mobileprovision
+*.cer
+.env
+android/local.properties
+
+# ── Android ──
+.gradle/
+android/app/build/
+android/build/
+*.apk
+*.aab
+
+# ── 杂项 ──
+.DS_Store
+Thumbs.db
+shots/
+*.log
+node_modules/
+
+backend/.env
+backend/**/*.env
+
+# ���ع��߰�װ����swift ���������ػ��棩
+tools/swift-dl/
+tools/*.log

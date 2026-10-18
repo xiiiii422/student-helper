@@ -1,0 +1,95 @@
+# XcodeGen 工程描述。
+#
+# 为什么用 XcodeGen 而不是提交 .xcodeproj：pbxproj 是机器格式，手写极易出错、
+# 合并冲突无解，而且加一个文件要改三处。这里 60 行 YAML 说清楚整个工程，
+# 云端 CI 和本地都靠 `xcodegen generate` 现生成，源码才是唯一事实。
+#
+#   本地（Mac）：brew install xcodegen && xcodegen generate
+#   CI：见 .github/workflows/ios.yml，已内置这一步
+name: StudentHelper
+options:
+  bundleIdPrefix: com.example
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+  developmentLanguage: zh-Hans
+  # 免费 Apple ID 侧载时不需要 App Group 等能力，保持最小
+  disabledValidations:
+    - missingConfigFiles
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+    TARGETED_DEVICE_FAMILY: "1"        # 只做 iPhone；iPhone 14 = 390x844 @3x
+    CODE_SIGN_STYLE: Automatic
+    # Key 不在这里声明。原先写成 `GLM_API_KEY: $(GLM_API_KEY)` 是自引用，
+    # Xcode 展开时等于空串，且会报递归警告。正确做法是从外部注入：
+    #   - CI：xcodebuild 命令行末尾 `GLM_API_KEY="${{ secrets.GLM_API_KEY }}"`
+    #     （命令行 build setting 优先级最高，Info.plist 的 $(GLM_API_KEY) 能取到）
+    #   - 本地 Mac：xcodebuild 里手写 `GLM_API_KEY=xxx`，或复制 Secrets.xcconfig 后
+    #     在命令行加 `-xcconfig Secrets.xcconfig`
+
+packages:
+  # 纯逻辑层：不依赖任何 Apple-only 框架，Windows/Linux 上也能 swift test
+  SHCore:
+    path: Core
+
+targets:
+  StudentHelper:
+    type: application
+    platform: iOS
+    sources:
+      - path: App/StudentHelper
+        excludes:
+          - "Assets/**"
+      # 整目录作为 folder reference 进 bundle，这样
+      # Bundle.main.url(forResource: "KaTeX", withExtension: nil) 拿得到目录，
+      # HTML 里的 katex.min.css / fonts/ 相对路径才解析得开
+      - path: App/StudentHelper/Assets/KaTeX
+        buildPhase: resources
+        type: folder
+    dependencies:
+      - package: SHCore
+    info:
+      path: App/Generated/Info.plist
+      properties:
+        CFBundleDisplayName: 学习小助手
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen:
+          UIColorName: ""
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        # 直连大模型：只有 https，不需要 NSAllowsArbitraryLoads
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: false
+        NSCameraUsageDescription: 拍照识别你的题目
+        NSPhotoLibraryUsageDescription: 从相册选择题目的照片
+        CFBundleLocalizations:
+          - zh-Hans
+          - en
+        # Key 由 xcconfig 注入 Info.plist，首次启动搬到 Keychain
+        GLMApiKey: $(GLM_API_KEY)
+        DeepSeekApiKey: $(DEEPSEEK_API_KEY)
+        DefaultProvider: $(DEFAULT_PROVIDER)
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.studenthelper
+        ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOL_EXTENSIONS: YES
+
+schemes:
+  StudentHelper:
+    build:
+      targets:
+        StudentHelper: all
+    run:
+      config: Debug
+      # CI 用 -uiTestScreen <名字> 直达各个界面截图，见 App/StudentHelper/ScreenshotSupport.swift
+      arguments:
+        environmentVariables:
+          UI_TEST_MODE: "0"
+    test:
+      config: Debug

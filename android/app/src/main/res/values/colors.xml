@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 小米澎湃 OS（HyperOS）浅色系统色 -->
+    <color name="primary">#FF0A59F7</color>
+    <color name="secondary">#FFFF6900</color>
+    <color name="chinese_accent">#FFF53F3F</color>
+    <color name="math_accent">#FF0A59F7</color>
+    <color name="english_accent">#FF00B42A</color>
+    <color name="composition_accent">#FFFF6900</color>
+    <color name="me_accent">#FF722ED1</color>
+    <color name="background">#FFF5F5F5</color>
+    <color name="surface">#FFFFFFFF</color>
+    <color name="text_primary">#FF1D2129</color>
+    <color name="ic_launcher_background">#FF0A59F7</color>
+</resources>
