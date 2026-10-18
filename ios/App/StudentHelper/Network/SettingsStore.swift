@@ -92,7 +92,14 @@ final class SettingsStore: SettingsProviding, @unchecked Sendable {
     // MARK: Key
 
     func apiKey(for provider: String) -> String {
-        Keychain.read(account: "apikey." + provider) ?? ""
+        // 优先用用户在设置页改过的（钥匙串），读不到再退回编译期内置的。
+        // 之前只读钥匙串：一旦播种失败（模拟器 / 钥匙串被清 / 写入被拒），
+        // 界面显示“未设置”、请求直接 401，而内置 Key 明明还在包里。
+        if let stored = Keychain.read(account: "apikey." + provider),
+           !stored.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return stored
+        }
+        return bundledKeys[provider] ?? ""
     }
 
     func setApiKey(_ value: String, for provider: String) {
