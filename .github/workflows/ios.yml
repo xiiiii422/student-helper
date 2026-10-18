@@ -115,8 +115,14 @@ jobs:
           ")
           echo "UDID=$UDID"
           xcrun simctl boot "$UDID"
+          # 必须等设备真正启动完成，否则紧接着的 ui appearance 会静默失效
+          # （上一轮就是这么截出一批和浅色一模一样的"深色图"）。
+          xcrun simctl bootstatus "$UDID" -b
           # 外观：截深色图时先切过去，否则截到的还是浅色
-          xcrun simctl ui "$UDID" appearance "${{ github.event.inputs.appearance || 'light' }}"
+          TARGET_APPEARANCE="${{ github.event.inputs.appearance || 'light' }}"
+          [ "$TARGET_APPEARANCE" = "dark" ] && TARGET_APPEARANCE=dark || TARGET_APPEARANCE=light
+          xcrun simctl ui "$UDID" appearance "$TARGET_APPEARANCE"
+          echo "当前模拟器外观: $(xcrun simctl ui "$UDID" appearance)"
           # 状态栏时间固定，避免两次截图只因分钟数不同就被判成回归
           xcrun simctl status_bar "$UDID" override \
             --time "9:41" --batteryState charged --batteryLevel 100 --cellularBars 4 \

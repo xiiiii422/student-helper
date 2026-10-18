@@ -6,7 +6,9 @@ DerivedData/
 ios/App/StudentHelper.xcodeproj/
 ios/App/Generated/
 .release/
+.release*/
 release/*.mapping
+release/*.ipa
 
 # XcodeGen：工程文件由 project.yml 现生成，不入库
 !ios/App/StudentHelper.xcodeproj
@@ -31,26 +33,20 @@ android/build/
 # ── 杂项 ──
 .DS_Store
 Thumbs.db
-shots/
 *.log
 node_modules/
-
 backend/.env
 backend/**/*.env
+
+# ── 本地产物与素材（含真实作业照片、带 Key 的 ipa，一律不入库）──
+shots/
+shots_*/
+shots_ios*/
+shots_now/
+ocr_poc/
+.release_ink/
 
 # 本地工具安装包（swift 工具链下载缓存）
 tools/swift-dl/
 tools/*.log
-
-# 临时草稿
 tools/_*
-
-
-shots_ios*/
-release/*.ipa
-
-# ���� OCR �����زģ�����ʵ��ҵ��Ƭ��������⣩
-ocr_poc/
-
-# �κα��ز���Ŀ¼�������д� Key �� ipa��������⣩.release*/
-.release_ink/
