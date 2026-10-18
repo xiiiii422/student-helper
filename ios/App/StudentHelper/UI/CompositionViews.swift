@@ -504,10 +504,8 @@ final class CompositionListViewModel: ObservableObject {
     func reload() { items = store.compositions() }
 
     func delete(_ item: Composition) {
-        store.deleteComposition(item)
-        for uri in item.imageUriList {
-            try? FileManager.default.removeItem(atPath: uri)
-        }
+        // store 返回被删作文的图片路径，统一走 FileStorage 的安全删除（只删沙盒 images 目录）
+        for uri in store.deleteComposition(item) { FileStorage.delete(path: uri) }
         reload()
     }
 }

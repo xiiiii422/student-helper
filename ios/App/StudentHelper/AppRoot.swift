@@ -128,6 +128,15 @@ final class AppContainer: ObservableObject {
             initialTab = nil
             initialRoute = nil
         }
+
+        // 清扫孤儿图片：早期版本删消息/清空学科时不删图片文件，靠这一步把存量泄漏收回来。
+        // 引用集合来自消息与作文两处；不在集合里的文件一律删除。
+        let referenced = Set(
+            store.backupSnapshot.messages.compactMap(\.imageUri)
+                + store.backupSnapshot.compositions.flatMap(\.imageUriList)
+        )
+        let removed = FileStorage.sweepOrphans(keeping: referenced)
+        if removed > 0 { print("[FileStorage] 清理孤儿图片 \(removed) 张") }
     }
 
     private static func landing(for screen: UITestScreen) -> (BottomTab, Route?) {

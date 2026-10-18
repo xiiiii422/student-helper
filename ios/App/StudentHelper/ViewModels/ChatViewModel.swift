@@ -177,13 +177,14 @@ final class ChatViewModel: ObservableObject {
     // MARK: - 其它动作
 
     func deleteMessage(id: Int) {
-        store.deleteMessage(id: id)
+        // 删消息时顺手把它带的那张图删掉，否则图片会永远留在沙盒里
+        if let path = store.deleteMessage(id: id) { FileStorage.delete(path: path) }
         reload()
     }
 
     func clearSubject() {
         speech.stop()
-        store.clearSubject(subject)
+        for path in store.clearSubject(subject) { FileStorage.delete(path: path) }
         reload()
     }
 

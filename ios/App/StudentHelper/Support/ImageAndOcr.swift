@@ -127,6 +127,28 @@ enum FileStorage {
         try? FileManager.default.removeItem(at: imagesDirectory)
     }
 
+    /// 删掉单张图片（只允许删沙盒 images 目录里的，防止路径被写坏时误删别的文件）。
+    static func delete(path: String) {
+        guard !path.isEmpty,
+              path.hasPrefix(imagesDirectory.path + "/") || path.hasPrefix(imagesDirectory.path + "\\")
+        else { return }
+        try? FileManager.default.removeItem(atPath: path)
+    }
+
+    /// 启动时清扫孤儿图片：数据库里已无人引用的文件一律删掉。
+    /// 早期版本「删消息不删图」，靠这一步把历史泄漏收回来。
+    @discardableResult
+    static func sweepOrphans(keeping referenced: Set<String>) -> Int {
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: imagesDirectory, includingPropertiesForKeys: nil
+        )) ?? []
+        var removed = 0
+        for file in files where !referenced.contains(file.path) {
+            if (try? FileManager.default.removeItem(at: file)) != nil { removed += 1 }
+        }
+        return removed
+    }
+
     static var totalImageBytes: Int {
         let files = (try? FileManager.default.contentsOfDirectory(
             at: imagesDirectory, includingPropertiesForKeys: [.fileSizeKey]

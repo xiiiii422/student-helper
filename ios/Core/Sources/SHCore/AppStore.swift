@@ -205,10 +205,15 @@ public final class AppStore {
     }
 
     /// 长按删除单条消息，收藏行随之外键级联移除。
-    public func deleteMessage(id: Int) {
+    /// 返回该消息关联的图片路径：Core 不碰文件系统，由 App 层据此删文件，
+    /// 否则图片会一直留在沙盒里（历史版本就是这么把磁盘吃满的）。
+    @discardableResult
+    public func deleteMessage(id: Int) -> String? {
+        let imagePath = snapshot.messages.first { $0.id == id }?.imageUri
         snapshot.messages.removeAll { $0.id == id }
         snapshot.favorites.removeAll { $0.messageId == id }
         save()
+        return imagePath
     }
 
     /// 启动时清理流式中断残留：删空占位、把未定稿消息收尾。
@@ -223,11 +228,16 @@ public final class AppStore {
         save()
     }
 
-    public func clearSubject(_ subject: String) {
-        let doomed = snapshot.messages.filter { $0.subject == subject }.map(\.id)
+    /// 清空某学科；返回被删掉的图片路径（同上，交给 App 层删文件）。
+    @discardableResult
+    public func clearSubject(_ subject: String) -> [String] {
+        let doomedMessages = snapshot.messages.filter { $0.subject == subject }
+        let imagePaths = doomedMessages.compactMap(\.imageUri)
+        let doomedIds = doomedMessages.map(\.id)
         snapshot.messages.removeAll { $0.subject == subject }
-        snapshot.favorites.removeAll { doomed.contains($0.messageId) }
+        snapshot.favorites.removeAll { doomedIds.contains($0.messageId) }
         save()
+        return imagePaths
     }
 
     // MARK: 收藏
@@ -290,9 +300,13 @@ public final class AppStore {
         save()
     }
 
-    public func deleteComposition(_ c: Composition) {
+    /// 删除作文；返回它的图片路径，交给 App 层删文件。
+    @discardableResult
+    public func deleteComposition(_ c: Composition) -> [String] {
+        let imagePaths = c.imageUriList
         snapshot.compositions.removeAll { $0.id == c.id }
         save()
+        return imagePaths
     }
 
     // MARK: 备份 / 清空

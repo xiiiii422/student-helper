@@ -226,4 +226,39 @@ final class AppStoreTests: XCTestCase {
         XCTAssertFalse(AppStore.shouldShowTimestamp(rows, index: 1), "间隔 4 分钟不显示")
         XCTAssertTrue(AppStore.shouldShowTimestamp(rows, index: 2), "间隔 16 分钟要显示")
     }
+
+    // MARK: 删除时把图片路径交还给调用方（否则图片文件永远留在磁盘上）
+
+    func test删消息返回它带的图片路径() throws {
+        let (store, _) = try makeStore()
+        let msg = store.insert(Message(
+            subject: "math", role: "user", textContent: "题",
+            imageUri: "/tmp/images/a.jpg"
+        ))
+        XCTAssertEqual(store.deleteMessage(id: msg.id), "/tmp/images/a.jpg")
+        XCTAssertNil(store.deleteMessage(id: msg.id), "再删一次应该没有图片可返回")
+    }
+
+    func test清空学科返回该学科全部图片路径() throws {
+        let (store, _) = try makeStore()
+        store.insert(Message(subject: "math", role: "user", textContent: "1", imageUri: "/tmp/images/a.jpg"))
+        store.insert(Message(subject: "math", role: "user", textContent: "2", imageUri: "/tmp/images/b.jpg"))
+        store.insert(Message(subject: "math", role: "assistant", textContent: "答"))  // 无图
+        store.insert(Message(subject: "english", role: "user", textContent: "3", imageUri: "/tmp/images/c.jpg"))
+
+        let removed = store.clearSubject("math")
+        XCTAssertEqual(Set(removed), Set(["/tmp/images/a.jpg", "/tmp/images/b.jpg"]))
+        XCTAssertEqual(store.messages(subject: "math").count, 0)
+        XCTAssertEqual(store.messages(subject: "english").count, 1, "别的学科不能被误删")
+    }
+
+    func test删作文返回图片路径() throws {
+        let (store, _) = try makeStore()
+        let c = store.insert(Composition(
+            title: "我的妈妈", content: "正文", imageUris: "[\"/tmp/images/p1.jpg\",\"/tmp/images/p2.jpg\"]",
+            aiFeedback: "{}"
+        ))
+        XCTAssertEqual(Set(store.deleteComposition(c)), Set(["/tmp/images/p1.jpg", "/tmp/images/p2.jpg"]))
+        XCTAssertTrue(store.compositions().isEmpty)
+    }
 }
