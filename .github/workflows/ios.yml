@@ -9,6 +9,15 @@ name: iOS
 on:
   workflow_dispatch:
     inputs:
+      target:
+        description: "跑哪个任务"
+        required: false
+        default: ipa
+        type: choice
+        options:
+          - ipa
+          - screens
+          - all
       screens:
         description: 要截的界面，空格分隔；all 表示全部
         required: false
@@ -46,8 +55,10 @@ jobs:
     # macos-14 镜像将于 2026-11-02 退役，改用 macos-15（Xcode 16 / iOS 18 SDK，
     # 支持 iOS 16 部署目标）。见 github.blog/changelog/2026-10-01-...-retirement
     runs-on: macos-15
+    # 截图依赖逻辑层已经跑通，所以保留 needs；但 ipa 不依赖单测（见下），
+    # 否则一个单测标题写错就把装机包也挡住了。
     needs: core-tests
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[ios-screens]')
+    if: (github.event_name == 'workflow_dispatch' && inputs.target != 'ipa') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ios-screens]'))
     steps:
       - uses: actions/checkout@v4
 
@@ -133,8 +144,9 @@ jobs:
   ipa:
     name: 构建 ipa
     runs-on: macos-15
-    needs: core-tests
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    # 刻意不写 needs: core-tests —— 能否构建出包 与 单测是否全绿 是两件事，
+    # 把两者串起来会让"只是某个文案断言挂了"把装机路径整个堵死。
+    if: (github.event_name == 'workflow_dispatch' && inputs.target != 'screens') || startsWith(github.ref, 'refs/tags/v')
     steps:
       - uses: actions/checkout@v4
 
