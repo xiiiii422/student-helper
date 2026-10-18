@@ -312,7 +312,7 @@ struct CompositionNewView: View {
                     .foregroundStyle(vm.canSubmit && !vm.submitting ? Color.white : palette.textTertiary)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 13)
-                    .background(Capsule().fill(vm.canSubmit && !vm.submitting ? Hyper.miBlue : palette.fill))
+                    .background(Capsule().fill(vm.canSubmit && !vm.submitting ? Hyper.miBlue : palette.divider))
                 }
                 .buttonStyle(.plain)
                 // 正文和照片都空时不给点：以前看着能点，点下去只弹一句「请先输入」

@@ -249,7 +249,7 @@ struct EssayView: View {
                 .foregroundStyle(canGenerate ? Color.white : palette.textTertiary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 13)
-                .background(Capsule().fill(canGenerate ? Hyper.composition : palette.fill))
+                .background(Capsule().fill(canGenerate ? Hyper.composition : palette.divider))
         }
         .buttonStyle(.plain)
         .disabled(!canGenerate)
