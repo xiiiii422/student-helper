@@ -105,9 +105,10 @@ public enum Zip {
         let centralOffset = Int(read32(slice, 16))
         // 中央目录里的 count / offset 全部来自文件内容，属于不可信输入：
         // 拿去当 Data.subdata 的区间会直接越界 trap（用户随便挑个 zip 导入就闪退）。
-        guard count > 0, count <= 10_000,
-              centralOffset >= 0, centralOffset + 46 <= data.count
-        else { throw ZipError.truncated }
+        guard count >= 0, count <= 10_000 else { throw ZipError.truncated }
+        // 空包（0 个条目）是合法的：写出来再读回去应当得到空数组
+        if count == 0 { return [] }
+        guard centralOffset >= 0, centralOffset + 46 <= data.count else { throw ZipError.truncated }
         var cursor = centralOffset
 
         var entries: [Entry] = []
