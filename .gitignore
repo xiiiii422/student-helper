@@ -49,3 +49,6 @@ tools/_*
 ios/Pods/
 ios/StudentHelper.xcworkspace/
 ios/StudentHelper.xcodeproj/
+
+shots_ios*/
+release/*.ipa
