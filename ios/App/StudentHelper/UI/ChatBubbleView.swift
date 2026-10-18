@@ -26,6 +26,8 @@ struct ChatBubbleView: View {
     var onDelete: (() -> Void)? = nil
 
     @Environment(\.hyperPalette) private var palette
+    /// 缩略图异步解码结果（先占位、后填图，避免主线程解大图）
+    @State private var thumbnailImage: UIImage?
 
     private var isUser: Bool { role == "user" }
     private var bubbleColor: Color { isUser ? palette.accent : palette.fill }
@@ -95,7 +97,7 @@ struct ChatBubbleView: View {
 
     private func thumbnail(_ uri: String) -> some View {
         Group {
-            if let image = LocalImage.load(uri) {
+            if let image = thumbnailImage {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
@@ -106,6 +108,11 @@ struct ChatBubbleView: View {
                     .fill(palette.fill)
                     .frame(width: 210, height: 160)
                     .overlay(Image(systemName: "photo").foregroundStyle(palette.textTertiary))
+                    // 占位先出现，解码在后台完成——流式时整表每 300ms 重绘一次，
+                    // 同步解码会让滚动明显掉帧。
+                    .task(id: uri) {
+                        thumbnailImage = await LocalImage.loadAsync(uri)
+                    }
             }
         }
         .padding(.bottom, 4)
@@ -215,12 +222,44 @@ enum Haptics {
 }
 
 /// 本地图片读取（拍照/相册都先落到 App 沙盒，路径存进数据库，与安卓 FileStorage 同思路）。
+///
+/// 必须带缓存：流式回答时列表每 300 毫秒重绘一次，无缓存会把同一张图反复从磁盘解码，
+/// 滚动和流式都会掉帧。
 enum LocalImage {
-    static func load(_ uri: String) -> UIImage? {
-        let path = uri.hasPrefix("file://")
-            ? (URL(string: uri)?.path ?? uri)
-            : uri
+
+    private static let cache: NSCache<NSString, UIImage> = {
+        let c = NSCache<NSString, UIImage>()
+        c.countLimit = 60
+        c.totalCostLimit = 80 * 1024 * 1024
+        return c
+    }()
+
+    private static func normalize(_ uri: String) -> String {
+        uri.hasPrefix("file://") ? (URL(string: uri)?.path ?? uri) : uri
+    }
+
+    private static func decode(_ path: String) -> UIImage? {
         if let image = UIImage(contentsOfFile: path) { return image }
         return UIImage(contentsOfFile: NSTemporaryDirectory() + (path as NSString).lastPathComponent)
+    }
+
+    static func load(_ uri: String) -> UIImage? {
+        let path = normalize(uri)
+        if let hit = cache.object(forKey: path as NSString) { return hit }
+        guard let image = decode(path) else { return nil }
+        let cost = Int(image.size.width * image.size.height * image.scale * image.scale * 4)
+        cache.setObject(image, forKey: path as NSString, cost: cost)
+        return image
+    }
+
+    /// 后台解码；命中缓存时立刻返回，不占主线程。
+    static func loadAsync(_ uri: String) async -> UIImage? {
+        let path = normalize(uri)
+        if let hit = cache.object(forKey: path as NSString) { return hit }
+        return await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(returning: Self.load(uri))
+            }
+        }
     }
 }
