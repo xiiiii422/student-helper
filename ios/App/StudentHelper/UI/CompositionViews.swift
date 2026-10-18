@@ -351,7 +351,11 @@ struct CompositionNewView: View {
         .sheet(isPresented: $showLibrary) {
             PhotoLibraryPicker(
                 onPick: { url in showLibrary = false; if let saved = FileStorage.persist(imageAt: url) { vm.addImage(saved) } },
-                onCancel: { showLibrary = false }
+                onCancel: { showLibrary = false },
+                onError: { message in
+                    showLibrary = false
+                    vm.error = message
+                }
             )
             .ignoresSafeArea()
         }

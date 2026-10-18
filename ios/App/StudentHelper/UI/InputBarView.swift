@@ -159,6 +159,8 @@ struct CameraPicker: UIViewControllerRepresentable {
 struct PhotoLibraryPicker: UIViewControllerRepresentable {
     let onPick: (URL) -> Void
     let onCancel: () -> Void
+    /// 取图失败时回传一句能看懂的原因（真机上 iCloud 照片没下载时会取不到数据）
+    var onError: (String) -> Void = { _ in }
     /// 一次最多选几张。聊天页只处理一张（多选会被 OCR guard 丢掉后几张），作文页给 4。
     var limit: Int = 4
 
@@ -166,6 +168,9 @@ struct PhotoLibraryPicker: UIViewControllerRepresentable {
         var config = PHPickerConfiguration()
         config.filter = .images
         config.selectionLimit = limit
+        // 用原始表示（不强制转码），再自己统一转 JPEG；多选时保持用户点选顺序
+        config.preferredAssetRepresentationMode = .current
+        config.selection = .ordered
         let picker = PHPickerViewController(configuration: config)
         picker.delegate = context.coordinator
         return picker
@@ -185,22 +190,44 @@ struct PhotoLibraryPicker: UIViewControllerRepresentable {
                 parent.onCancel()
                 return
             }
-            // 用 loadTransferable(Data) 而不是已废弃的 loadObject(ofClass:)：
-            // 拿到的是原始文件数据，HEIC 不用先转一道，也不会把整张原图读进内存
+
+            // 以前用 loadTransferable(Data.self)：真机上 HEIC / iCloud 未下载的照片经常取不到数据，
+            // 表现就是系统弹「无法载入照片」或者干脆没反应。
+            // 改成 loadDataRepresentation，并且统一转成 JPEG 再落盘——
+            // 这样后续 UIImage 解码、压缩、上传视觉模型的格式完全一致，HEIC 也不会漏到下游。
+            let group = DispatchGroup()
+            let lock = NSLock()
+            var delivered = 0
+
             for result in results {
                 let provider = result.itemProvider
-                guard provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) else { continue }
-                _ = provider.loadTransferable(type: Data.self) { object in
-                    switch object {
-                    case .success(let data):
-                        let url = FileManager.default.temporaryDirectory
-                            .appendingPathComponent("lib_\(UUID().uuidString).jpg")
-                        if (try? data.write(to: url)) != nil {
-                            DispatchQueue.main.async { self.parent.onPick(url) }
-                        }
-                    case .failure:
-                        DispatchQueue.main.async { self.parent.onCancel() }
+                guard provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) else {
+                    continue
+                }
+                group.enter()
+                provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, _ in
+                    defer { group.leave() }
+                    guard let data,
+                          let image = UIImage(data: data),
+                          let jpeg = image.jpegData(compressionQuality: 0.92) else {
+                        return
                     }
+                    let url = FileManager.default.temporaryDirectory
+                        .appendingPathComponent("lib_\(UUID().uuidString).jpg")
+                    guard (try? jpeg.write(to: url)) != nil else {
+                        return
+                    }
+                    lock.lock(); delivered += 1; lock.unlock()
+                    DispatchQueue.main.async { self.parent.onPick(url) }
+                }
+            }
+
+            group.notify(queue: .main) {
+                if delivered == 0 {
+                    self.parent.onError(
+                        "这张照片读取失败。多半是 iCloud 照片还没下载到本机——"
+                        + "请先在图库中打开一次让它下载，或改用拍照。"
+                    )
                 }
             }
         }

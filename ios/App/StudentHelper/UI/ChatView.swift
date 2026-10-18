@@ -250,6 +250,10 @@ struct ChatView: View {
                 }
             },
             onCancel: { showLibrary = false },
+            onError: { message in
+                showLibrary = false
+                vm.error = message
+            },
             // 聊天页一次只处理一张：processImage 有 ocrWorking 串行保护，选多了会被静默丢弃
             limit: 1
         )
