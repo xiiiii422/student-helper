@@ -143,7 +143,8 @@ jobs:
           for name in $SCREENS; do
             echo "=== $name ==="
             xcrun simctl terminate "$UDID" "$BUNDLE_ID" 2>/dev/null || true
-            xcrun simctl launch "$UDID" "$BUNDLE_ID" -uiTestScreen "$name"
+            # 主题也从启动参数注入：浅色/深色都走同一条确定性路径，不依赖模拟器外观
+            xcrun simctl launch "$UDID" "$BUNDLE_ID" -uiTestScreen "$name" -uiTestTheme "$TARGET_APPEARANCE"
             # KaTeX 是异步渲染 + 两次量高，给足时间否则截到半成品
             sleep 7
             xcrun simctl io "$UDID" screenshot "shots/$name.png"

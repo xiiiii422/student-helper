@@ -114,6 +114,8 @@ final class AppContainer: ObservableObject {
         self.llm = LlmService(settings: settings)
         self.speech = SpeechService()
         self.themeMode = ThemeMode(rawValue: settings.themeMode) ?? .system
+        // 截图模式可强制主题：CI 里模拟器外观有时不生效，这里保证深色图真能截出来
+        if let forced = ScreenshotMode.themeOverride { self.themeMode = forced }
 
         // 截图模式：先把库刷成固定数据再预置开局界面，保证每次 CI 看到的都是同一屏
         if let screen = ScreenshotMode.screen {

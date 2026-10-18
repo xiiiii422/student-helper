@@ -39,6 +39,16 @@ enum ScreenshotMode {
 
     static var isActive: Bool { screen != nil }
 
+    /// 截图时强制主题。模拟器的 `simctl ui appearance dark` 在 CI 上不稳定
+    /// （App 仍会拿到 light 的 colorScheme），所以直接从启动参数注入，保证深色可复现。
+    static var themeOverride: ThemeMode? {
+        let args = ProcessInfo.processInfo.arguments
+        guard let index = args.firstIndex(of: "-uiTestTheme"), index + 1 < args.count else {
+            return nil
+        }
+        return args[index + 1] == "dark" ? .dark : .light
+    }
+
     // MARK: 预置数据
 
     /// 一条数学答案，故意覆盖最容易出问题的排版位置：
