@@ -308,10 +308,11 @@ struct CompositionNewView: View {
                         Text(vm.submitting ? "批改中…" : "开始批改")
                             .font(HyperType.titleMedium)
                     }
-                    .foregroundStyle(.white)
+                    // 禁用态用灰底深灰字（同作文页），浅蓝底白字在浅色背景下看不清
+                    .foregroundStyle(vm.canSubmit && !vm.submitting ? Color.white : palette.textTertiary)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 13)
-                    .background(Capsule().fill(vm.canSubmit && !vm.submitting ? Hyper.miBlue : Hyper.miBlue.opacity(0.35)))
+                    .background(Capsule().fill(vm.canSubmit && !vm.submitting ? Hyper.miBlue : palette.fill))
                 }
                 .buttonStyle(.plain)
                 // 正文和照片都空时不给点：以前看着能点，点下去只弹一句「请先输入」

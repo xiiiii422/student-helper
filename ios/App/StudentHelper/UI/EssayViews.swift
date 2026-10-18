@@ -244,10 +244,12 @@ struct EssayView: View {
         } label: {
             Text(vm.generating ? "生成中…" : "生成范文")
                 .font(HyperType.titleMedium)
-                .foregroundStyle(.white)
+                // 禁用态别用「浅色底 + 白字」——在浅色背景上几乎看不见，
+                // 换成灰底深灰字，学生一眼就知道是「还不能点」而不是「按钮坏了」。
+                .foregroundStyle(canGenerate ? Color.white : palette.textTertiary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 13)
-                .background(Capsule().fill(canGenerate ? Hyper.composition : Hyper.composition.opacity(0.35)))
+                .background(Capsule().fill(canGenerate ? Hyper.composition : palette.fill))
         }
         .buttonStyle(.plain)
         .disabled(!canGenerate)
