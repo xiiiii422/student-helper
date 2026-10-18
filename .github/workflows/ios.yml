@@ -175,9 +175,19 @@ jobs:
           cp -R dd/Build/Products/Release-iphoneos/$SCHEME.app out/Payload/
           (cd out && zip -qr "$SCHEME-unsigned.ipa" Payload)
           mv out/$SCHEME-unsigned.ipa ./
+          ls -lh $SCHEME-unsigned.ipa
+          # 顺手验证 API Key 真的被注进 Info.plist 了（没注入的话装上也调不通模型）
+          KEY=$(/usr/libexec/PlistBuddy -c "Print :GLMApiKey" \
+            "dd/Build/Products/Release-iphoneos/$SCHEME.app/Info.plist" 2>/dev/null || true)
+          if [ -z "$KEY" ]; then echo "::error::Info.plist 里 GLMApiKey 为空，检查仓库 Secrets"; exit 1; fi
+          echo "GLMApiKey 已注入，长度 ${#KEY}"
 
       - name: 上传 ipa
         uses: actions/upload-artifact@v4
         with:
           name: iphone-ipa
-          path: ${{ env.SCHEME }}-unsigned.ipa
+          # 注意：这个 job 的 working-directory 是 ios/，产物也在 ios/ 下。
+          # 之前写成 "StudentHelper-unsigned.ipa"（相对仓库根），结果只打了一条
+          # warning 就“成功”了，产物其实是空的。
+          path: ios/${{ env.SCHEME }}-unsigned.ipa
+          if-no-files-found: error
