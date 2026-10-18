@@ -69,12 +69,21 @@ jobs:
         working-directory: ios
         run: xcodegen generate
 
+      # ML Kit Digital Ink 只以 CocoaPods 分发，所以这里多一步 pod install，
+      # 之后的构建都改用生成的 .xcworkspace（.xcodeproj 只是其中一半）。
+      - name: 安装 CocoaPods 依赖
+        working-directory: ios
+        run: |
+          pod --version
+          pod install
+          ls -d StudentHelper.xcworkspace
+
       - name: 构建模拟器包
         working-directory: ios
         run: |
           set -euo pipefail
           xcodebuild build \
-            -project StudentHelper.xcodeproj \
+            -workspace StudentHelper.xcworkspace \
             -scheme "$SCHEME" \
             -configuration Debug \
             -sdk iphonesimulator \
@@ -160,12 +169,19 @@ jobs:
           xcodegen --version
           xcodegen generate
 
+      - name: 安装 CocoaPods 依赖
+        working-directory: ios
+        run: |
+          pod --version
+          pod install
+          ls -d StudentHelper.xcworkspace
+
       - name: 无签名构建（自用侧载：由 Sideloadly/AltServer 在本地签名）
         working-directory: ios
         run: |
           set -euo pipefail
           xcodebuild build \
-            -project StudentHelper.xcodeproj -scheme "$SCHEME" \
+            -workspace StudentHelper.xcworkspace -scheme "$SCHEME" \
             -configuration Release -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             -derivedDataPath ./dd \

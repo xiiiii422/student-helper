@@ -1,0 +1,40 @@
+# 手写识别用 Google ML Kit Digital Ink。
+#
+# 为什么这里出现 CocoaPods：ML Kit 的 iOS SDK 只以 CocoaPods 分发，没有 SwiftPM 版本。
+# 于是工程变成「XcodeGen 生成 .xcodeproj → pod install 生成 .xcworkspace」，
+# 构建/截图都要改用 .xcworkspace（见 .github/workflows/ios.yml）。
+#
+# 注意：本文件必须放在 ios/ 目录下，和 project.yml 同级。
+
+platform :ios, '16.0'
+
+# 主工程由 xcodegen 现生成，所以 Podfile 里不写 project 行，
+# 让 CocoaPods 在同一目录里找唯一那个 .xcodeproj。
+
+target 'StudentHelper' do
+  # ML Kit 的 framework 是静态库；不声明 static linkage 会和
+  # Swift Package（SHCore）混编产生重复符号。
+  use_frameworks! :linkage => :static
+
+  # 8.0.0 是文档标注的版本；9.x 已发布且官方 sample 在用，
+  # 这里锁 9.x 以匹配当前 Xcode 16 工具链。
+  pod 'GoogleMLKit/DigitalInkRecognition', '~> 9.0'
+end
+
+post_install do |installer|
+  # Xcode 14+ 起 Pods 的 xcconfig 里 DT_TOOLCHAIN_DIR 变量名变了，
+  # 不做这个替换会在 Xcode 15/16 下报找不到 SDK 的错（官方 sample 同款处理）。
+  installer.aggregate_targets.each do |target|
+    target.xcconfigs.each do |variant, xcconfig|
+      xcconfig_path = target.client_root + target.xcconfig_relative_path(variant)
+      IO.write(xcconfig_path, IO.read(xcconfig_path).gsub("DT_TOOLCHAIN_DIR", "TOOLCHAIN_DIR"))
+    end
+  end
+  installer.generated_projects.each do |project|
+    project.targets.each do |target|
+      target.build_configurations.each do |config|
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'
+      end
+    end
+  end
+end

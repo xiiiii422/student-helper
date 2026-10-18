@@ -5,6 +5,9 @@ import SHCore
 /// 手写输入板：手指写一道题，识别成文字填回输入框。
 /// 对齐安卓 `ui/components/HandwritingCanvas.kt` 的用途 —— 有些题目学生打不出字
 /// （分数、几何图形、古诗里的生僻字），但写得出来。
+///
+/// 识别优先走 ML Kit Digital Ink（吃笔迹，离线，中文/英文模型），
+/// 只有它不可用时才退回「渲染成图片交给 Vision」的老路（Vision 对手写很差，仅作兜底）。
 struct HandwritingSheet: View {
     let onResult: (String) -> Void
 
@@ -12,17 +15,22 @@ struct HandwritingSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var strokes: [Stroke] = []
     @State private var current: [CGPoint] = []
+    @State private var currentTimes: [Int] = []
     @State private var recognizing = false
+    @State private var candidates: [HandwritingInk.Candidate] = []
     @State private var hint: String?
 
     struct Stroke: Equatable {
         var points: [CGPoint]
+        /// 绝对毫秒时间戳，和 points 一一对应；转给 ML Kit 时再减掉首点做归一。
+        var times: [Int] = []
     }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 12) {
                 canvas
+                if !candidates.isEmpty { candidateRow }
                 toolbar
                 if let hint {
                     Text(hint)
@@ -98,25 +106,65 @@ struct HandwritingSheet: View {
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { value in
-                    if current.isEmpty { current = [value.location] }
-                    else { current.append(value.location) }
+                    let t = Self.millis(value.time)
+                    if current.isEmpty {
+                        current = [value.location]
+                        currentTimes = [t]
+                    } else {
+                        current.append(value.location)
+                        currentTimes.append(t)
+                    }
                 }
-                .onEnded { _ in
-                    if current.count > 1 || current.count == 1 {
-                        strokes.append(Stroke(points: current))
+                .onEnded { value in
+                    if !current.isEmpty {
+                        current.append(value.location)
+                        currentTimes.append(Self.millis(value.time))
+                        strokes.append(Stroke(points: current, times: currentTimes))
                     }
                     current = []
+                    currentTimes = []
                 }
         )
+    }
+
+    /// 候选字词：手写识别一次给多个候选，让学生自己挑比硬猜一个准。
+    private var candidateRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("选一个填进去（或直接在下面改）")
+                .font(HyperType.footnote)
+                .foregroundStyle(palette.textSecondary)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(candidates.prefix(6)) { candidate in
+                        Button {
+                            accept(candidate.text)
+                        } label: {
+                            Text(candidate.text)
+                                .font(HyperType.bodyMedium)
+                                .foregroundStyle(palette.text)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .fill(palette.fill)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
     }
 
     private var toolbar: some View {
         HStack(spacing: 12) {
             secondaryButton("撤销一笔", icon: "arrow.uturn.backward", disabled: strokes.isEmpty) {
                 if !strokes.isEmpty { strokes.removeLast() }
+                candidates = []
             }
             secondaryButton("清空", icon: "eraser", disabled: strokes.isEmpty) {
                 strokes.removeAll()
+                candidates = []
                 hint = nil
             }
             Spacer()
@@ -142,11 +190,43 @@ struct HandwritingSheet: View {
         .disabled(disabled)
     }
 
+    private func accept(_ text: String) {
+        onResult(text)
+        Haptics.success()
+        dismiss()
+    }
+
+    // MARK: 识别
+
     private func recognize() {
         recognizing = true
         hint = nil
+        candidates = []
         let finished = strokes
+
+        if !HandwritingInk.anyReady {
+            hint = "首次使用要先下载手写模型（约 20MB），请保持联网…"
+        }
+
         Task {
+            // 1) 首选：ML Kit Digital Ink（真正的笔迹识别）
+            let inkStrokes = Self.toInkStrokes(finished)
+            if !inkStrokes.isEmpty {
+                let merged = await HandwritingInk.recognizeMerged(strokes: inkStrokes)
+                if !merged.isEmpty {
+                    await MainActor.run {
+                        recognizing = false
+                        candidates = merged
+                        hint = "识别出 \(merged.count) 个候选，点一个填进去"
+                    }
+                    return
+                }
+            }
+
+            // 2) 兜底：渲染成图片交给 Vision（手写效果差，但总比没结果强）
+            await MainActor.run {
+                hint = "手写模型没给出结果，改用图片识别兜底…"
+            }
             let image = HandwritingRenderer.render(strokes: finished)
             let result = await OcrService.recognize(image: image)
             await MainActor.run {
@@ -156,11 +236,27 @@ struct HandwritingSheet: View {
                     hint = "没认出字来。写大一点、贴着横格写，或者改用拍照。"
                     Haptics.warning()
                 } else {
-                    onResult(text)
-                    Haptics.success()
-                    dismiss()
+                    candidates = [HandwritingInk.Candidate(text: text, score: 0)]
+                    hint = "这是图片识别的结果，点一下填进去"
                 }
             }
+        }
+    }
+
+    private static func millis(_ date: Date) -> Int {
+        Int(date.timeIntervalSince1970 * 1000)
+    }
+
+    private static func toInkStrokes(_ strokes: [Stroke]) -> [InkStroke] {
+        strokes.compactMap { stroke in
+            guard stroke.points.count > 1 else { return nil }
+            let base = stroke.times.first ?? 0
+            var points: [InkStroke.Point] = []
+            for (i, p) in stroke.points.enumerated() {
+                let raw = i < stroke.times.count ? stroke.times[i] : base + i * 16
+                points.append(InkStroke.Point(x: p.x, y: p.y, t: max(0, raw - base)))
+            }
+            return InkStroke(points: points)
         }
     }
 }

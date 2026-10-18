@@ -38,9 +38,14 @@ node_modules/
 backend/.env
 backend/**/*.env
 
-# ±¾µØ¹¤¾ß°²×°°ü£¨swift ¹¤¾ßÁ´ÏÂÔØ»º´æ£©
+# æœ¬åœ°å·¥å…·å®‰è£…åŒ…ï¼ˆswift å·¥å…·é“¾ä¸‹è½½ç¼“å­˜ï¼‰
 tools/swift-dl/
 tools/*.log
 
-# ÁÙÊ±²İ¸å
+# ä¸´æ—¶è‰ç¨¿
 tools/_*
+
+# CocoaPodsï¼ˆML Kit æ‰‹å†™è¯†åˆ«ï¼‰
+ios/Pods/
+ios/StudentHelper.xcworkspace/
+ios/StudentHelper.xcodeproj/
