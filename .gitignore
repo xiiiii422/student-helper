@@ -45,10 +45,6 @@ tools/*.log
 # 临时草稿
 tools/_*
 
-# CocoaPods（ML Kit 手写识别）
-ios/Pods/
-ios/StudentHelper.xcworkspace/
-ios/StudentHelper.xcodeproj/
 
 shots_ios*/
 release/*.ipa

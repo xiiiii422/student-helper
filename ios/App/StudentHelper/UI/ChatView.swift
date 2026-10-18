@@ -12,7 +12,6 @@ struct ChatView: View {
     @State private var input = ""
     @State private var showCamera = false
     @State private var showLibrary = false
-    @State private var showHandwriting = false
     @State private var showClearConfirm = false
     @State private var previewUri: String?
     @State private var pendingDelete: Message?
@@ -42,7 +41,6 @@ struct ChatView: View {
                 accent: accent,
                 onTakePhoto: { showCamera = true },
                 onPickImage: { showLibrary = true },
-                onHandwriting: { showHandwriting = true },
                 onSend: {
                     vm.sendText(input)
                     input = ""
@@ -52,11 +50,6 @@ struct ChatView: View {
         .background(palette.background)
         .sheet(isPresented: $showCamera) { cameraSheet }
         .sheet(isPresented: $showLibrary) { librarySheet }
-        .sheet(isPresented: $showHandwriting) {
-            HandwritingSheet { text in
-                input = input.isEmpty ? text : input + text
-            }
-        }
         .sheet(item: $vm.pendingOcr) { pending in
             OcrConfirmSheet(pending: pending) { text, mode in
                 vm.confirmPendingSend(text: text, mode: mode)
@@ -362,7 +355,7 @@ struct EmptyChatState: View {
                     .font(HyperType.title2)
                     .foregroundStyle(palette.text)
                     .padding(.top, 18)
-                Text("打字、拍照或手写题目都可以")
+                Text("直接打字，或拍一张题目照片")
                     .font(HyperType.bodyMedium)
                     .foregroundStyle(palette.textSecondary)
                     .padding(.top, 6)

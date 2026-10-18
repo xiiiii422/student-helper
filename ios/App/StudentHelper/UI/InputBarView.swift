@@ -5,15 +5,16 @@ import PhotosUI
 import SHCore
 
 /// 输入栏，逐条对齐安卓 `ui/components/InputBar.kt`：
-/// 左侧拍照 / 相册 / 手写三个入口，中间浅灰胶囊输入框，右侧圆形上箭头发送。
+/// 左侧拍照 / 相册两个入口，中间浅灰胶囊输入框，右侧圆形上箭头发送。
 /// 半透乳白底 + 发丝顶线，和底栏同一套材质。
+///
+/// 手写入口已移除：小学生搜题就是拍一张，在手机上比划写字反而更慢。
 struct InputBarView: View {
     @Binding var text: String
     let enabled: Bool
     let accent: Color
     var onTakePhoto: () -> Void = {}
     var onPickImage: () -> Void = {}
-    var onHandwriting: () -> Void = {}
     var onSend: () -> Void = {}
 
     @Environment(\.hyperPalette) private var palette
@@ -30,7 +31,6 @@ struct InputBarView: View {
             HStack(alignment: .bottom, spacing: 6) {
                 icon("camera", label: "拍照", action: onTakePhoto)
                 icon("photo.on.rectangle", label: "相册", action: onPickImage)
-                icon("pencil.line", label: "手写", action: onHandwriting)
 
                 field
 
