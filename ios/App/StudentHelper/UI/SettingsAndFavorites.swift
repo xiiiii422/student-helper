@@ -30,7 +30,7 @@ struct SettingsView: View {
 
                 VStack(spacing: 10) {
                     field("接口地址（Base URL）", text: $vm.form.baseUrl, keyboard: .URL)
-                    secureField("API Key", text: $vm.form.apiKey)
+                    secureField("API Key", text: $vm.form.apiKey, hasStored: vm.hasStoredKey)
                     field("文本模型（讲题/批改）", text: $vm.form.chatModel, placeholder: "glm-4.7-flash")
                     field("视觉模型（拍照识题）", text: $vm.form.vlModel, placeholder: "glm-4v-flash")
                 }
@@ -136,10 +136,10 @@ struct SettingsView: View {
         }
     }
 
-    private func secureField(_ label: String, text: Binding<String>) -> some View {
+    private func secureField(_ label: String, text: Binding<String>, hasStored: Bool) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label).font(HyperType.footnote).foregroundStyle(palette.textSecondary)
-            SecureField("未设置", text: text)
+            SecureField(hasStored ? "已保存（留空表示不修改）" : "未设置", text: text)
                 .font(HyperType.bodyMedium)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
@@ -164,10 +164,21 @@ final class SettingsViewModel: ObservableObject {
     @Published var pinging = false
     @Published var message: String?
 
-    // 朗读设置直接读写 SpeechService 的持久化属性
-    @Published var autoSpeak: Bool
-    @Published var rate: Float
-    @Published var voiceIdentifier: String?
+    // 朗读设置直接读写 SpeechService 的持久化属性。
+    // didSet 立刻写回：否则这些只是 ViewModel 里的副本，改完设置页看着变了、
+    // 实际朗读仍用旧参数（SpeechService 的 didSet 才会落 UserDefaults）。
+    @Published var autoSpeak: Bool {
+        didSet { if speech.autoSpeak != autoSpeak { speech.autoSpeak = autoSpeak } }
+    }
+    @Published var rate: Float {
+        didSet { if speech.rate != rate { speech.rate = rate } }
+    }
+    @Published var voiceIdentifier: String? {
+        didSet { if speech.preferredVoice != voiceIdentifier { speech.preferredVoice = voiceIdentifier } }
+    }
+
+    /// 当前供应商在本机钥匙串里是否已有 Key（决定输入框提示语）。
+    var hasStoredKey: Bool { !settings.apiKey(for: form.providerId).isEmpty }
 
     private let settings: SettingsStore
     private let llm: LlmService

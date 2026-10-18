@@ -102,8 +102,8 @@ public enum Zip {
         let slice = data.subdata(in: endOffset..<data.count)
         guard slice.count >= 22 else { throw ZipError.truncated }
         let count = Int(read16(slice, 10))
-        var centralOffset = UInt32(read32(slice, 16))
-        var cursor = Int(centralOffset)
+        let centralOffset = UInt32(read32(slice, 16))
+        let cursor = Int(centralOffset)
 
         var entries: [Entry] = []
         entries.reserveCapacity(count)

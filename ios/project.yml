@@ -43,6 +43,10 @@ targets:
       - path: App/StudentHelper
         excludes:
           - "Assets/**"
+      # App 图标（Assets.xcassets）：交给 actool 编译成 Assets.car。
+      # 之前没放图标，装到手机上桌面是白块、Impactor 里显示 "No icon"。
+      - path: App/StudentHelper/Assets/Assets.xcassets
+        buildPhase: resources
       # 整目录作为 folder reference 进 bundle，这样
       # Bundle.main.url(forResource: "KaTeX", withExtension: nil) 拿得到目录，
       # HTML 里的 katex.min.css / fonts/ 相对路径才解析得开
@@ -78,6 +82,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.studenthelper
+        # 让 actool 把 Assets.xcassets 里的 AppIcon 编进包（不写这行图标不会生效）
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOL_EXTENSIONS: YES
 
 schemes:
