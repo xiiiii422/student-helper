@@ -48,6 +48,36 @@ xcrun simctl io <UDID> screenshot chatMath.png
 免费账号的硬限制：同时最多 3 个自签 App；装完要在
 「设置 → 通用 → VPN 与设备管理」里信任自己的 Apple ID；iOS 17+ 还要开「开发者模式」。
 
+## 手写识别（ML Kit Digital Ink）
+
+手写板不再「把笔迹渲染成图片再 OCR」——那条路 Vision 只有印刷体模型，中文手写基本认不出。
+现在改为采集**笔迹坐标 + 时间戳**，交给 Google ML Kit Digital Ink 的离线模型：
+
+- 语言模型：`zh-Hani`（汉字/数字）+ `en-US`（拉丁字母），两个都跑一遍再合并候选
+- 模型不打进包体，首次识别前自动下载（单个语言约 20MB），**仅 Wi-Fi**，之后完全离线
+- 识别出多个候选时列出来让学生自己点选，比硬猜一个准
+- 模型不可用（下载失败/超时）时自动退回 Vision 图片识别兜底
+
+### 构建链变化：多了 CocoaPods
+
+ML Kit 只以 CocoaPods 分发（没有 SwiftPM），所以工程变成：
+
+```
+xcodegen generate          # 生成 StudentHelper.xcodeproj
+pod install                # 生成 StudentHelper.xcworkspace（依赖 ML Kit）
+xcodebuild -workspace StudentHelper.xcworkspace ...
+```
+
+CI（`.github/workflows/ios.yml`）已内置这两步；**本地构建也要改用 .xcworkspace**。
+`ios/Pods/`、`ios/StudentHelper.xcworkspace` 均不入库。
+
+### 已知限制
+
+- 数学公式（分式、根号、上下标）暂时没有端侧模型，仍由 `glm-4v-flash` 视觉兜底
+- iOS 27 起苹果有官方的 `PKStrokeRecognizer`（PencilKit），未来可替换 ML Kit 省依赖，
+  但当前部署目标是 iOS 16，用不上
+
+
 ## 与安卓的差异
 
 | 项目 | 安卓 | iOS |
