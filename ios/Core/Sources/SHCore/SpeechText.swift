@@ -32,7 +32,9 @@ public enum SpeechText {
     private static let sqrt = try! NSRegularExpression(pattern: #"\\sqrt\s*\{([^{}]*)\}"#)
     private static let power2 = try! NSRegularExpression(pattern: #"\^\s*2|\\times\s*2(?![0-9])"#)
     private static let power3 = try! NSRegularExpression(pattern: #"\^\s*3"#)
-    private static let percent = try! NSRegularExpression(pattern: #"([0-9.]+)\s*%"#)
+    // LaTeX 里的百分号可能是 `%` 也可能是 `\%`，两种都得认出「百分之」；
+    // 只认裸 `%` 时 `25\%` 会漏到 wordMap 里变成 "25%"，TTS 会念成「二十五 percent」。
+    private static let percent = try! NSRegularExpression(pattern: #"([0-9.]+)\s*\\?%"#)
     private static let leftoverCmd = try! NSRegularExpression(pattern: #"\\[a-zA-Z]+"#)
     private static let multiSpace = try! NSRegularExpression(pattern: "[ \\t]{2,}")
     private static let cjk = try! NSRegularExpression(pattern: #"[\u4e00-\u9fff]"#)
@@ -91,8 +93,8 @@ public enum SpeechText {
         // 正则只吃不含花括号的一层，所以嵌套分数天然从最内层开始替，循环几次就能剥完。
         for _ in 0..<4 {
             let next = replacing(frac, s) { m in
-                let num = group(m, 1, in: s).trimmingCharacters(in: .whitespaces)
-                let den = group(m, 2, in: s).trimmingCharacters(in: .whitespaces)
+                let num = chineseNumber(group(m, 1, in: s))
+                let den = chineseNumber(group(m, 2, in: s))
                 return " \(den)分之\(num) "
             }
             if next == s { break }
@@ -111,6 +113,38 @@ public enum SpeechText {
         s = s.replacingOccurrences(of: "{", with: "").replacingOccurrences(of: "}", with: "")
         s = replacing(multiSpace, s) { _ in " " }
         return s.trimmingCharacters(in: .whitespaces)
+    }
+
+    // MARK: 数字转中文
+
+    /// 分数里的阿拉伯数字要先转成汉字：`\frac{7}{8}` 应念「八分之七」，
+    /// 若留成 "8分之7"，TTS 会把前半读成英文字母、后半读成数字，语速和音色都会跳。
+    private static func chineseNumber(_ raw: String) -> String {
+        let t = raw.trimmingCharacters(in: .whitespaces)
+        guard !t.isEmpty, t.allSatisfy({ $0.isNumber }), let n = Int(t), n >= 0, n <= 9999 else { return t }
+        return chineseNumber(n)
+    }
+
+    private static func chineseNumber(_ n: Int) -> String {
+        let d = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"]
+        if n < 10 { return d[n] }
+        if n < 20 { return n == 10 ? "十" : "十" + d[n % 10] }
+        if n < 100 {
+            let tens = d[n / 10] + "十"
+            return n % 10 == 0 ? tens : tens + d[n % 10]
+        }
+        if n < 1000 {
+            let head = d[n / 100] + "百"
+            let rem = n % 100
+            if rem == 0 { return head }
+            if rem < 10 { return head + "零" + d[rem] }
+            return head + chineseNumber(rem)
+        }
+        let head = d[n / 1000] + "千"
+        let rem = n % 1000
+        if rem == 0 { return head }
+        if rem < 100 { return head + "零" + chineseNumber(rem) }
+        return head + chineseNumber(rem)
     }
 
     /// 归一化 + 按呼吸断句 + 逐段判定语种。
@@ -143,25 +177,31 @@ public enum SpeechText {
     }
 
     private static func flush(_ result: inout [String], _ current: inout String, maxChunkChars: Int) {
-        let trimmed = current.trimmingCharacters(in: .whitespacesAndNewlines)
+        var rest = current.trimmingCharacters(in: .whitespacesAndNewlines)
         current = ""
-        guard !trimmed.isEmpty else { return }
-        if trimmed.count <= maxChunkChars {
-            result.append(trimmed)
-            return
-        }
-        // 太长：从最后一个逗号/顿号处劈开，保证 TTS 有换气，不至于越念越快
-        var head = Substring(trimmed)
+        guard !rest.isEmpty else { return }
+        // 太长：反复从最后一个逗号/顿号/空格处劈开，保证 TTS 有换气，不至于越念越快。
+        // 旧实现只在整串里找「最后一个」软分隔，结果把 200+ 字整段又塞回去，等于没切。
         let soft: [Character] = ["，", "、", ",", " "]
-        for mark in soft {
-            if let idx = head.lastIndex(of: mark),
-               head.distance(from: head.startIndex, to: idx) > maxChunkChars / 3 {
-                let cut = head.index(after: idx)
-                result.append(String(head[..<cut]).trimmingCharacters(in: .whitespaces))
-                head = head[cut...]
+        while rest.count > maxChunkChars {
+            // 软分隔最多允许落到 1.5 倍上限（测试容许 60/42），再远就硬切
+            let windowEnd = rest.index(rest.startIndex, offsetBy: min(rest.count, maxChunkChars + maxChunkChars / 2))
+            let window = rest[rest.startIndex..<windowEnd]
+            var cut: String.Index?
+            for mark in soft {
+                if let idx = window.lastIndex(of: mark) {
+                    let after = rest.index(after: idx)
+                    if after > rest.startIndex, rest.distance(from: rest.startIndex, to: after) > maxChunkChars / 2 {
+                        cut = after
+                    }
+                    break
+                }
             }
+            let boundary = cut ?? rest.index(rest.startIndex, offsetBy: maxChunkChars)
+            let head = String(rest[rest.startIndex..<boundary]).trimmingCharacters(in: .whitespaces)
+            if !head.isEmpty { result.append(head) }
+            rest = String(rest[boundary...]).trimmingCharacters(in: .whitespaces)
         }
-        let rest = String(head).trimmingCharacters(in: .whitespaces)
         if !rest.isEmpty { result.append(rest) }
     }
 

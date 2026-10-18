@@ -195,7 +195,8 @@ struct ChatView: View {
         let target: AnyHashable
         if vm.liveAssistantText != nil { target = "streaming" }
         else if vm.sendFailure != nil { target = "failure" }
-        else { target = vm.messages.last?.id ?? "" }
+        else if let last = vm.messages.last { target = AnyHashable(last.id) }
+        else { target = AnyHashable("") }
         withAnimation(.easeOut(duration: 0.18)) {
             proxy.scrollTo(target, anchor: .bottom)
         }

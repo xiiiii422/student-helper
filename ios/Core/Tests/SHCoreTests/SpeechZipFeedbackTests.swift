@@ -8,8 +8,8 @@ final class SpeechTextTests: XCTestCase {
     func test分数按中文语序念() {
         // 中文说「八分之七」：先分母后分子，和书写顺序相反
         XCTAssertEqual(SpeechText.speakMath("\\frac{7}{8}"), "八分之七")
-        // 嵌套分数从最内层剥：1/(2/3) → 一分之二分之三
-        XCTAssertEqual(SpeechText.speakMath("\\frac{1}{\\frac{2}{3}}"), "一分之二分之三")
+        // 嵌套分数先剥最内层：\frac{2}{3} → 三分之二，再套外层 → 三分之二分之一
+        XCTAssertEqual(SpeechText.speakMath("\\frac{1}{\\frac{2}{3}}"), "三分之二分之一")
     }
 
     func test行内公式整体翻成口语() {
@@ -140,7 +140,7 @@ final class FeedbackParserTests: XCTestCase {
     }
 
     func test分数写成字符串也能读出来() throws {
-        let fb = try XCTUnwrap(FeedbackParser.parse("{\"总分\": \"92\", \"总评\": 好}"))
+        let fb = try XCTUnwrap(FeedbackParser.parse("{\"总分\": \"92\", \"总评\": \"好\"}"))
         XCTAssertEqual(fb.totalScore, 92)
     }
 

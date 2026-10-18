@@ -124,10 +124,12 @@ final class ChatViewModel: ObservableObject {
             )
 
             do {
-                for try await delta in self.llm.chatStream(
+                // LlmService 是 actor：取流这一步就要 await，拿到流之后再逐条遍历
+                let stream = await self.llm.chatStream(
                     subject: self.subject, userText: userText,
                     history: history, imagesBase64: images, signals: signals
-                ) {
+                )
+                for try await delta in stream {
                     accumulated += delta
                     self.liveAssistantText = accumulated
                     if self.statusHint != nil { self.statusHint = nil }

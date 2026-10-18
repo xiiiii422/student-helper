@@ -48,7 +48,8 @@ public enum LlmPolicy {
         if raw.contains("403") || raw.contains("余额") || lower.contains("insufficient") {
             return "无权限/欠费"
         }
-        if lower.contains("timeout") { return "响应超时" }
+        // `read timed out`（Foundation 的 URLSession 文案）里没有 "timeout" 连写，得单独认
+        if lower.contains("timeout") || lower.contains("timed out") { return "响应超时" }
         if raw.contains("Unable to resolve") || raw.contains("Failed to connect") || lower.contains("network") {
             return "本机无网络"
         }

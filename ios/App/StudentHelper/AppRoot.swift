@@ -22,7 +22,7 @@ struct StudentHelperApp: App {
                 .tint(container.palette(
                     systemDark: systemScheme == .dark
                 ).accent)
-                .preferredColorScheme(container.themeMode.colorScheme(systemDark: systemScheme == .dark))
+                .preferredColorScheme(container.themeMode.colorScheme(systemScheme == .dark))
                 .onOpenURL { url in container.handle(url: url) }
                 .environment(\.quickAction, appDelegate.pendingAction)
                 .onChange(of: appDelegate.pendingAction) { action in

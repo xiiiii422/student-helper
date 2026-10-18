@@ -166,7 +166,7 @@ public actor LlmService {
             messages: [Msg("user", "你好")], stream: false,
             maxTokensOverride: 8, disableThinking: cfg.disableThinking
         )
-        let (bytes, response) = try await session.bytes(from: request(cfg, data))
+        let (bytes, response) = try await session.bytes(for: request(cfg, data))
         guard let http = response as? HTTPURLResponse else { throw LlmError.empty("无 HTTP 响应") }
         var body = Data()
         for try await byte in bytes { body.append(byte) }
@@ -239,7 +239,7 @@ public actor LlmService {
             let attemptStart = Date()
 
             do {
-                let (bytes, response) = try await session.bytes(from: request(cfg, bodyData))
+                let (bytes, response) = try await session.bytes(for: request(cfg, bodyData))
                 guard let http = response as? HTTPURLResponse else {
                     throw LlmError.empty("无 HTTP 响应")
                 }

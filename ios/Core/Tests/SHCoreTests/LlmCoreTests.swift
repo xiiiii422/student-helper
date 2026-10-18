@@ -271,7 +271,10 @@ final class LlmCoreTests: XCTestCase {
     func test两家默认都关思考自定义不送() {
         XCTAssertTrue(Presets.glm.disableThinking)
         XCTAssertTrue(Presets.deepseek.disableThinking)
-        XCTAssertFalse(Presets.preset(of: "custom").disableThinking)
+        // 「自定义供应商一律不送 thinking」这条规则在 App 层 SettingsStore：
+        //   disableThinking: id != "custom" && preset.disableThinking
+        // Core 的 preset(of:) 对未知 id 是回退到 glm，所以这里只能断言回退行为本身。
+        XCTAssertEqual(Presets.preset(of: "custom").id, "glm")
         XCTAssertEqual(Presets.short(of: "glm"), "智谱")
         XCTAssertEqual(Presets.short(of: "nope"), "当前")
         XCTAssertEqual(Presets.label(of: "nope"), "当前服务")

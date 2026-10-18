@@ -26,7 +26,7 @@ struct MathWebView: UIViewRepresentable {
         web.backgroundColor = .clear
         web.scrollView.isScrollEnabled = false
         web.scrollView.bounces = false
-        web.showsVerticalScrollIndicator = false
+        web.scrollView.showsVerticalScrollIndicator = false
         web.allowsLinkPreview = false
         #if DEBUG
         if #available(iOS 16.4, *) { web.isInspectable = true }

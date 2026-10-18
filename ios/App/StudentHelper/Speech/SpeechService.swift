@@ -126,7 +126,7 @@ final class SpeechService: NSObject, ObservableObject {
         utterance.rate = rate
         utterance.preUtteranceDelay = cursor == 0 ? 0 : 0.05
         // 句末停得久一点、逗号停得短一点，节奏才不像连读
-        utterance.postUtteranceDelay = trailingPause(of: chunk.text)
+        utterance.postUtteranceDelay = TimeInterval(trailingPause(of: chunk.text))
         utterance.volume = 1.0
         if let voice = pickVoice(for: chunk.language) { utterance.voice = voice }
         isSpeaking = true
