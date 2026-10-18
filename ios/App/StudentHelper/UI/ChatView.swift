@@ -17,6 +17,7 @@ struct ChatView: View {
     @State private var pendingDelete: Message?
 
     @Environment(\.hyperPalette) private var palette
+    @EnvironmentObject private var router: Router
 
     init(
         title: String,
@@ -53,8 +54,8 @@ struct ChatView: View {
         .sheet(isPresented: $showCamera) { cameraSheet }
         .sheet(isPresented: $showLibrary) { librarySheet }
         .sheet(item: $vm.pendingOcr) { pending in
-            OcrConfirmSheet(pending: pending) { text, mode in
-                vm.confirmPendingSend(text: text, mode: mode)
+            OcrConfirmSheet(pending: pending) { text, mode, grade in
+                vm.confirmPendingSend(text: text, mode: mode, gradeMode: grade)
             } onCancel: {
                 vm.pendingOcr = nil
             }
@@ -104,7 +105,13 @@ struct ChatView: View {
         IosLargeTitle(
             title: title,
             actions: AnyView(
-                IosTextButton(text: "清空") { showClearConfirm = true }
+                HStack(spacing: 12) {
+                    // 语文页给「生成作文」入口（之前只有桌面长按图标能进）
+                    if vm.subject == "chinese" {
+                        IosTextButton(text: "生成作文") { router.push(.essay) }
+                    }
+                    IosTextButton(text: "清空") { showClearConfirm = true }
+                }
             )
         )
     }

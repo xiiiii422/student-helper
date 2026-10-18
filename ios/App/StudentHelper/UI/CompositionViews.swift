@@ -17,7 +17,13 @@ struct CompositionListView: View {
         VStack(spacing: 0) {
             IosLargeTitle(
                 title: "作文",
-                actions: AnyView(EmptyView())
+                actions: AnyView(
+                    HStack(spacing: 12) {
+                        // 「生成作文」以前只有桌面长按图标才能进，App 里找不到入口
+                        IosTextButton(text: "生成作文") { router.push(.essay) }
+                        IosTextButton(text: "新建批改") { router.push(.compositionNew) }
+                    }
+                )
             )
             if vm.items.isEmpty {
                 emptyState

@@ -63,6 +63,7 @@ public actor LlmService {
         userText: String,
         history: [Msg],
         imagesBase64: [String] = [],
+        gradeMode: Bool = false,
         signals: Signals = .init()
     ) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
@@ -71,7 +72,7 @@ public actor LlmService {
                     let cfg = await self.settings.current()
                     let fb = await self.settings.fallback(for: cfg)
                     let msgs = try PromptAssembler.chatMessages(
-                        subject: subject, userText: userText, history: history
+                        subject: subject, userText: userText, history: history, gradeMode: gradeMode
                     )
                     try await self.runStream(
                         cfg: cfg, fallback: fb, messages: msgs, imagesBase64: imagesBase64,

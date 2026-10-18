@@ -7,14 +7,16 @@ import SHCore
 /// 之所以要问一句：识别准不准只有学生自己看得出来，而带原图会走更贵的视觉通道。
 struct OcrConfirmSheet: View {
     let pending: PendingOcr
-    let onSend: (String, SendMode) -> Void
+    let onSend: (String, SendMode, Bool) -> Void
     let onCancel: () -> Void
 
     @State private var text: String
     @State private var mode: SendMode
+    /// 照片上已经有学生的作答痕迹时，勾上这里让老师先批改再讲
+    @State private var gradeMode = false
     @Environment(\.hyperPalette) private var palette
 
-    init(pending: PendingOcr, onSend: @escaping (String, SendMode) -> Void, onCancel: @escaping () -> Void) {
+    init(pending: PendingOcr, onSend: @escaping (String, SendMode, Bool) -> Void, onCancel: @escaping () -> Void) {
         self.pending = pending
         self.onSend = onSend
         self.onCancel = onCancel
@@ -44,6 +46,22 @@ struct OcrConfirmSheet: View {
 
                     confidenceRow
 
+                    // 照片上有手写作答时，让老师先判对错再讲
+                    VStack(alignment: .leading, spacing: 6) {
+                        Toggle("批改我的作答", isOn: $gradeMode)
+                            .tint(Hyper.miOrange)
+                            .font(HyperType.bodyMedium)
+                        Text(gradeMode
+                             ? "老师会先判对错、指出错在哪一步，再给正确解法。"
+                             : "默认按讲题处理；如果照片上已写了答案，建议打开上面的开关。")
+                            .font(HyperType.footnote)
+                            .foregroundStyle(palette.textTertiary)
+                    }
+                    .padding(12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous).fill(palette.card)
+                    )
+
                     VStack(alignment: .leading, spacing: 8) {
                         Text("怎么问")
                             .font(HyperType.labelLarge)
@@ -66,7 +84,7 @@ struct OcrConfirmSheet: View {
                     Button("取消") { onCancel() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("发送") { onSend(text, mode) }
+                    Button("发送") { onSend(text, mode, gradeMode) }
                         // 「只发图片」模式下允许文字留空
                         .disabled(
                             mode != .imageOnly

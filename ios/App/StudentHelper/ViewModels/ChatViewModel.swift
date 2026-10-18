@@ -77,7 +77,8 @@ final class ChatViewModel: ObservableObject {
         imageUri: String?,
         imageBase64: String?,
         ocrConfidence: Double?,
-        skipUserInsert: Bool = false
+        skipUserInsert: Bool = false,
+        gradeMode: Bool = false
     ) {
         guard !streaming else { return }
         streaming = true
@@ -127,7 +128,8 @@ final class ChatViewModel: ObservableObject {
                 // LlmService 是 actor：取流这一步就要 await，拿到流之后再逐条遍历
                 let stream = await self.llm.chatStream(
                     subject: self.subject, userText: userText,
-                    history: history, imagesBase64: images, signals: signals
+                    history: history, imagesBase64: images,
+                    gradeMode: gradeMode, signals: signals
                 )
                 for try await delta in stream {
                     accumulated += delta
@@ -336,7 +338,7 @@ final class ChatViewModel: ObservableObject {
     }
 
     /// 确认发送（来自 OCR 对话框）：只发文字时不带图，省视觉通道的额度。
-    func confirmPendingSend(text: String, mode: SendMode) {
+    func confirmPendingSend(text: String, mode: SendMode, gradeMode: Bool = false) {
         guard let pending = pendingOcr else { return }
         pendingOcr = nil
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -346,7 +348,8 @@ final class ChatViewModel: ObservableObject {
             userText: prompt,
             imageUri: pending.imageUri,
             imageBase64: mode == .textOnly ? nil : pending.imageBase64,
-            ocrConfidence: mode == .imageOnly ? nil : pending.confidence
+            ocrConfidence: mode == .imageOnly ? nil : pending.confidence,
+            gradeMode: gradeMode
         )
     }
 }

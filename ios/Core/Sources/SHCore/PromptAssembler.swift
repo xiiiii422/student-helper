@@ -45,11 +45,14 @@ public enum PromptAssembler {
         subject: String,
         userText: String,
         history: [Msg],
-        maxTurns: Int = defaultMaxTurns
+        maxTurns: Int = defaultMaxTurns,
+        gradeMode: Bool = false
     ) throws -> [Msg] {
-        guard let system = Prompts.systemPrompts[subject] else {
+        guard let base = Prompts.systemPrompts[subject] else {
             throw LlmError.unknownSubject(subject)
         }
+        // 批改模式：学生照片上已经写了答案，让老师先判对错再讲
+        let system = gradeMode ? base + "\n\n" + Prompts.gradeModeNote : base
         let trimmed = Array(history.suffix(maxTurns * 2))
         return [Msg("system", system)] + trimmed + [Msg("user", userText)]
     }
