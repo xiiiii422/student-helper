@@ -98,22 +98,40 @@ public struct Favorite: Codable, Equatable, Identifiable {
     public var subject: String
     public var note: String
     public var createdAt: Int
+    /// 自测掌握状态：nil = 还没自测过。
+    /// 做成**可选**是为了兼容：旧版本存下来的库、以及安卓导来的备份都没有这个键，
+    /// 若是非可选，缺字段会让整个 BackupSnapshot 解码失败，用户数据直接看没了。
+    public var reviewState: String?
 
     public init(
         id: Int = 0, messageId: Int, subject: String, note: String = "",
-        createdAt: Int = Int(Date().timeIntervalSince1970 * 1000)
+        createdAt: Int = Int(Date().timeIntervalSince1970 * 1000),
+        reviewState: String? = nil
     ) {
         self.id = id
         self.messageId = messageId
         self.subject = subject
         self.note = note
         self.createdAt = createdAt
+        self.reviewState = reviewState
     }
 
     enum CodingKeys: String, CodingKey {
         case id, subject, note
         case messageId = "message_id"
         case createdAt = "created_at"
+        case reviewState = "review_state"
+    }
+
+    /// 解码时缺 review_state 就当 nil，不报错（兼容旧数据）。
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Int.self, forKey: .id)
+        messageId = try c.decode(Int.self, forKey: .messageId)
+        subject = try c.decode(String.self, forKey: .subject)
+        note = try c.decodeIfPresent(String.self, forKey: .note) ?? ""
+        createdAt = try c.decode(Int.self, forKey: .createdAt)
+        reviewState = try c.decodeIfPresent(String.self, forKey: .reviewState)
     }
 }
 
@@ -280,6 +298,34 @@ public final class AppStore {
             guard let msg = snapshot.messages.first(where: { $0.id == fav.messageId }) else { return nil }
             return (fav, msg)
         }
+    }
+
+    /// 记录自测结果：mastered=true 表示「这题我会了」。找不到收藏行返回 false。
+    @discardableResult
+    public func setReviewed(messageId: Int, mastered: Bool) -> Bool {
+        guard let i = snapshot.favorites.firstIndex(where: { $0.messageId == messageId }) else {
+            return false
+        }
+        snapshot.favorites[i].reviewState = mastered ? "mastered" : "again"
+        save()
+        return true
+    }
+
+    /// 掌握状态计数，供错题本顶部显示「已掌握 X / 共 Y」。
+    public func reviewCounts(subject: String?) -> (mastered: Int, again: Int, untested: Int) {
+        var mastered = 0, again = 0, untested = 0
+        for fav in favorites(subject: subject) where isFavoriteMessageStillThere(fav.messageId) {
+            switch fav.reviewState {
+            case "mastered": mastered += 1
+            case "again": again += 1
+            default: untested += 1
+            }
+        }
+        return (mastered, again, untested)
+    }
+
+    private func isFavoriteMessageStillThere(_ messageId: Int) -> Bool {
+        snapshot.messages.contains { $0.id == messageId }
     }
 
     // MARK: 作文
