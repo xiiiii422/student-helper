@@ -116,6 +116,7 @@ enum ScreenshotMode {
 
     【题目在考什么】
     一般现在时，第三人称单数。
+    分数读法示例：\\( \\frac{1}{2} \\) 读作 a half。
 
     【常见错误】
     He go to school. 漏了 s。
@@ -128,7 +129,6 @@ enum ScreenshotMode {
     【知识点小课堂】
     口诀：我 you 我们你们用原形，他她它后面动词加 s。
     比较级记忆：短词加 -er，长词前加 more。
-    比如 \\( \\frac{1}{2} \\) 在英语里读作 a half，\\( \\frac{3}{4} \\) 读作 three quarters。
 
     【改错建议与同类练习】
     建议：写完先看主语是谁，再决定动词加不加 s。
