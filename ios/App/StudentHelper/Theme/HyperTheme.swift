@@ -158,21 +158,32 @@ enum ThemeMode: Int, CaseIterable, Codable {
 
 /// 排版阶梯，对应安卓 AppTypography：Large Title 34 / Title2 22 / Body 17 / Subheadline 15 / Footnote 13。
 /// 字体用系统 SF Pro（中文自动回落 PingFang SC），与安卓用 MiSans 的思路一致：跟系统走，不自带字体。
+///
+/// 用 `.custom(_:size:relativeTo:)` 而不是 `Font.system(size:)`：
+/// 后者是绝对字号，系统「设置 → 显示与亮度 → 文字大小」调大时完全不变；
+/// 前者按指定样式缩放，用户在无障碍里放大字号，正文会真的变大。
+/// 这对小学生（尤其近视的）比像素级还原设计稿重要。
 enum HyperType {
     /// 页面大标题（IosLargeTitle 的等价物）
-    static let largeTitle = Font.system(size: 34, weight: .bold)
-    static let title2 = Font.system(size: 22, weight: .bold)
-    static let titleMedium = Font.system(size: 17, weight: .semibold)
+    static let largeTitle = Font.custom("SF Pro Display", size: 34, relativeTo: .largeTitle)
+        .weight(.bold)
+    static let title2 = Font.custom("SF Pro Display", size: 22, relativeTo: .title2)
+        .weight(.bold)
+    static let titleMedium = Font.custom("SF Pro Text", size: 17, relativeTo: .headline)
+        .weight(.semibold)
     /// 气泡正文：17/24，与安卓 bodyLarge 完全一致
-    static let body = Font.system(size: 17, weight: .regular)
-    static let bodyMedium = Font.system(size: 15, weight: .regular)
-    static let labelLarge = Font.system(size: 15, weight: .medium)
-    static let footnote = Font.system(size: 13, weight: .regular)
-    /// 气泡行高，对应安卓 lineHeight = 24.sp
+    static let body = Font.custom("SF Pro Text", size: 17, relativeTo: .body)
+    static let bodyMedium = Font.custom("SF Pro Text", size: 15, relativeTo: .subheadline)
+    static let labelLarge = Font.custom("SF Pro Text", size: 15, relativeTo: .subheadline)
+        .weight(.medium)
+    static let footnote = Font.custom("SF Pro Text", size: 13, relativeTo: .footnote)
+    /// 气泡行高，对应安卓 lineHeight = 24.sp。
+    /// 行距不跟字号等比放大是刻意的：大字号下再加 7pt 会散架，这里保持固定。
     static let bodyLineSpacing: CGFloat = 7
 
     /// 分数环里的数字
-    static let scoreNumber = Font.system(size: 15, weight: .bold)
+    static let scoreNumber = Font.custom("SF Pro Text", size: 15, relativeTo: .caption)
+        .weight(.bold)
 }
 
 /// 圆角：卡片 20 / 气泡 18 / 小件 12，与安卓 CardShape、BubbleShape 同值。
