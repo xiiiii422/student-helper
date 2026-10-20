@@ -430,6 +430,7 @@ struct CompositionDetailView: View {
     let id: Int
     @StateObject var vm: CompositionDetailViewModel
     @Environment(\.hyperPalette) private var palette
+    @EnvironmentObject private var router: Router
 
     var body: some View {
         ScrollView {
@@ -438,9 +439,11 @@ struct CompositionDetailView: View {
                     header(composition)
                     if let feedback = vm.feedback {
                         FeedbackDetailView(feedback: feedback)
+                        actions
                     } else {
                         // 解析失败也要让学生看到老师回了什么，不能白屏
                         rawFallback(composition.aiFeedback)
+                        actions
                     }
                 } else {
                     Text("这篇作文已经不在了")
@@ -453,6 +456,56 @@ struct CompositionDetailView: View {
         .background(palette.background)
         .navigationTitle(vm.composition?.title ?? "批改详情")
         .navigationBarTitleDisplayMode(.inline)
+        .alert("提示", isPresented: Binding(
+            get: { vm.error != nil },
+            set: { if !$0 { vm.error = nil } }
+        )) {
+            Button("好", role: .cancel) { vm.error = nil }
+        } message: {
+            Text(vm.error ?? "")
+        }
+    }
+
+    /// 批改完还能做两件事：让老师重批一次，或带着这篇作文去语文页追问。
+    private var actions: some View {
+        HStack(spacing: 10) {
+            Button {
+                vm.reGrade()
+            } label: {
+                HStack(spacing: 6) {
+                    if vm.submitting {
+                        ProgressView().tint(palette.accent)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    Text(vm.submitting ? "重批中…" : "重新批改")
+                        .font(HyperType.bodyMedium)
+                }
+                .foregroundStyle(palette.accent)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 11)
+                .background(Capsule().stroke(palette.accent, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .disabled(vm.submitting)
+
+            Button {
+                // 带着作文去语文页追问，学生能接着问「这段怎么改」
+                router.popToRoot()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "text.bubble")
+                    Text("去问老师")
+                        .font(HyperType.bodyMedium)
+                }
+                .foregroundStyle(palette.text)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 11)
+                .background(Capsule().fill(palette.fill))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.top, 4)
     }
 
     private func header(_ composition: Composition) -> some View {
@@ -500,15 +553,57 @@ struct CompositionDetailView: View {
 @MainActor
 final class CompositionDetailViewModel: ObservableObject {
     @Published var composition: Composition?
+    @Published var submitting = false
+    @Published var error: String?
     private let store: AppStore
+    private let llm: LlmService
 
-    init(id: Int, store: AppStore) {
+    init(id: Int, store: AppStore, llm: LlmService) {
         self.store = store
+        self.llm = llm
         self.composition = store.composition(id: id)
     }
 
     var feedback: CompositionFeedback? {
         composition.flatMap { FeedbackParser.parse($0.aiFeedback) }
+    }
+
+    /// 重新批改：同一篇作文再让老师评一次（换个角度/模型可能给不同建议）
+    func reGrade() {
+        guard !submitting, let current = composition else { return }
+        submitting = true
+        error = nil
+        Task { [weak self] in
+            guard let self else { return }
+            defer { self.submitting = false }
+            do {
+                let raw = try await self.llm.complete(
+                    systemPrompt: Prompts.compositionPrompt,
+                    userText: PromptAssembler.compositionUserMessage(
+                        title: current.title,
+                        grade: "六年级",
+                        content: current.content,
+                        requirement: nil,
+                        imageCount: current.imageUriList.count
+                    ),
+                    imagesBase64: [],
+                    temperature: PromptAssembler.temperature(for: .composition)
+                )
+                var updated = current
+                updated.aiFeedback = raw
+                if let parsed = FeedbackParser.parse(raw) {
+                    updated.score = parsed.totalScore
+                }
+                self.store.update(updated)
+                self.composition = updated
+                Haptics.success()
+            } catch {
+                self.error = LlmPolicy.friendlyError(
+                    (error as? LlmError)?.message ?? error.localizedDescription
+                )
+                Haptics.warning()
+            }
+        }
     }
 }
 

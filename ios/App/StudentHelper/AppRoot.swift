@@ -302,7 +302,7 @@ struct RootView: View {
             ))
         case .compositionDetail(let id):
             CompositionDetailView(id: id, vm: CompositionDetailViewModel(
-                id: id, store: container.store
+                id: id, store: container.store, llm: container.llm
             ))
         case .essay:
             EssayView(vm: EssayViewModel(llm: container.llm, store: container.store))
