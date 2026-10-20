@@ -17,6 +17,8 @@ struct MathWebView: UIViewRepresentable {
     let color: Color
     /// 量到的内容高度回调
     let onHeight: (CGFloat) -> Void
+    /// 诊断回调（仅截图模式），把 KaTeX 是否加载成功透出来
+    var onDiagnostics: (String) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -33,6 +35,9 @@ struct MathWebView: UIViewRepresentable {
         #endif
         web.navigationDelegate = context.coordinator
         context.coordinator.onHeight = onHeight
+        if ScreenshotMode.isActive {
+            context.coordinator.onDiagnostics = onDiagnostics
+        }
         return web
     }
 
@@ -54,6 +59,8 @@ struct MathWebView: UIViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate {
         var lastSignature: String?
         var onHeight: ((CGFloat) -> Void)?
+        /// 诊断回调（仅截图模式用）
+        var onDiagnostics: ((String) -> Void)?
         private var lastHeight: CGFloat = 0
 
         func reload(in web: WKWebView, content: String, colorHex: String) {
@@ -80,25 +87,30 @@ struct MathWebView: UIViewRepresentable {
         }
 
         /// 可写的 KaTeX 工作目录：首次调用把 bundle 里的 KaTeX 整目录拷过来。
-        /// 拷贝失败时退回 bundle 原目录（只读，但至少还能试一次）。
+        ///
+        /// 为什么必须拷：loadFileURL 的 allowingReadAccessTo 只接受**一个**目录，
+        /// 而 bundle 是只读的、HTML 又必须写盘，两者不在同一棵树里就没法同时授权。
+        /// 全部放进 Caches/KaTeX 后，HTML 与资源同目录，一次授权即可。
         static func workingDirectory() -> URL? {
             let fm = FileManager.default
             guard let caches = fm.urls(for: .cachesDirectory, in: .userDomainMask).first else {
                 return katexDirectoryURL
             }
             let dir = caches.appendingPathComponent("KaTeX", isDirectory: true)
-            if fm.fileExists(atPath: dir.appendingPathComponent("katex.min.js").path) {
-                return dir
-            }
+            let js = dir.appendingPathComponent("katex.min.js")
+            if fm.fileExists(atPath: js.path) { return dir }
+
             guard let source = katexDirectoryURL else { return nil }
             try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
-            if let items = try? fm.contentsOfDirectory(at: source, includingPropertiesForKeys: nil) {
-                for item in items {
-                    try? fm.copyItem(at: item, to: dir.appendingPathComponent(item.lastPathComponent))
-                }
+            guard let items = try? fm.contentsOfDirectory(at: source, includingPropertiesForKeys: nil)
+            else { return source }
+            for item in items {
+                let dest = dir.appendingPathComponent(item.lastPathComponent)
+                try? fm.removeItem(at: dest)          // 上次半截拷贝可能留着
+                try? fm.copyItem(at: item, to: dest)
             }
-            return fm.fileExists(atPath: dir.appendingPathComponent("katex.min.js").path)
-                ? dir : source
+            // 拷贝没成功（比如 fonts 目录）就退回 bundle 目录，至少 CSS/JS 还能试
+            return fm.fileExists(atPath: js.path) ? dir : source
         }
 
         /// Assets/KaTeX 目录：与安卓 assets/katex 同一批文件
@@ -112,11 +124,11 @@ struct MathWebView: UIViewRepresentable {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak webView] in
                 guard let webView else { return }
                 self.probe(webView)
-                self.diagnose(webView)
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) { [weak webView] in
                 guard let webView else { return }
                 self.probe(webView)
+                self.diagnose(webView) { text in self.onDiagnostics?(text) }
             }
         }
 
@@ -145,17 +157,24 @@ struct MathWebView: UIViewRepresentable {
         }
 
         /// 诊断用：KaTeX 到底有没有跑起来（脚本加载失败 / 解析报错都会导致公式保持原文）。
-        func diagnose(_ webView: WKWebView) {
+        /// 截图模式下把结果回传出来，直接画在页面上——CI 里 print 抓不到，
+        /// 只能靠「看得见的字」判断到底卡在哪一步。
+        func diagnose(_ webView: WKWebView, report: @escaping (String) -> Void) {
             let js = """
             (function(){
-              var ok = (typeof katex !== 'undefined');
+              var hasKatex = (typeof katex !== 'undefined');
+              var hasRender = (typeof renderMathInElement !== 'undefined');
               var rendered = document.querySelectorAll('.katex').length;
-              return ok ? ('katex=ok rendered=' + rendered) : 'katex=MISSING';
+              var bodyText = document.body ? document.body.innerText : '';
+              return 'katex=' + hasKatex + ' render=' + hasRender
+                   + ' nodes=' + rendered + ' len=' + bodyText.length;
             })();
             """
-            webView.evaluateJavaScript(js) { result, _ in
+            webView.evaluateJavaScript(js) { result, error in
                 if let text = result as? String {
-                    print("[MathWebView] \(text)")
+                    report(text)
+                } else if let error {
+                    report("js-error: \(error.localizedDescription)")
                 }
             }
         }
@@ -173,14 +192,26 @@ struct MathText: View {
     var color: Color = .primary
     @State private var height: CGFloat = 0
     @State private var renderFailed = false
+    /// 截图模式下的 KaTeX 诊断信息，直接画在页面上
+    @State private var diagnostics: String?
 
     var body: some View {
         Group {
             if MarkdownLite.containsLatex(content) && !renderFailed {
-                MathWebView(content: content, color: color) { measured in
-                    if measured != height { height = measured }
+                VStack(alignment: .leading, spacing: 2) {
+                    MathWebView(content: content, color: color) { measured in
+                        if measured != height { height = measured }
+                    } onDiagnostics: { text in
+                        diagnostics = text
+                    }
+                    .frame(width: .infinity, height: height > 0 ? height : 44, alignment: .topLeading)
+                    // 截图模式把诊断结果显示出来：CI 里看不到 print，只能靠页面上的字判断
+                    if ScreenshotMode.isActive, let diagnostics {
+                        Text("[katex] \(diagnostics)")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.orange)
+                    }
                 }
-                .frame(width: .infinity, height: height > 0 ? height : 44, alignment: .topLeading)
                 .task(id: content) {
                     // 2.5s 还没量到高度 = KaTeX 没跑起来，降级
                     try? await Task.sleep(nanoseconds: 2_500_000_000)
