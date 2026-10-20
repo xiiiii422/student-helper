@@ -93,6 +93,47 @@ public enum MarkdownLite {
         }.joined(separator: "\n")
     }
 
+    /// KaTeX 不可用时的降级：把 LaTeX 转成人能读的纯文字。
+    ///
+    /// 真机上如果 WKWebView 拿不到 bundle 里的 KaTeX 资源（或 JS 被拦），
+    /// 公式会原样显示成 `\( \frac{7}{8} \)`——学生看到一堆反斜杠。
+    /// 这里退化成「7/8」这种能看懂的形式，宁可朴素也不要露原始标记。
+    public static func degradeLatex(_ text: String) -> String {
+        var s = strip(text)
+        // 定界符直接去掉
+        for token in ["\\(", "\\)", "\\[", "\\]", "$$", "$"] {
+            s = s.replacingOccurrences(of: token, with: "")
+        }
+        // 分数 \frac{a}{b} → (a)/(b)，循环几次处理嵌套
+        let frac = try! NSRegularExpression(pattern: #"\\d?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}"#)
+        for _ in 0..<4 {
+            let next = replacing(frac, s) { m in
+                let num = group(m, 1, in: s).trimmingCharacters(in: .whitespaces)
+                let den = group(m, 2, in: s).trimmingCharacters(in: .whitespaces)
+                return "(\(num))/(\(den))"
+            }
+            if next == s { break }
+            s = next
+        }
+        let sqrt = try! NSRegularExpression(pattern: #"\\sqrt\s*\{([^{}]*)\}"#)
+        s = replacing(sqrt, s) { "√(" + group($0, 1, in: s) + ")" }
+        // 常见命令换成符号
+        let map: [(String, String)] = [
+            ("\\times", "×"), ("\\div", "÷"), ("\\pi", "π"),
+            ("\\approx", "≈"), ("\\geq", "≥"), ("\\leq", "≤"),
+            ("\\neq", "≠"), ("\\angle", "∠"), ("\\%", "%"),
+            ("\\left", ""), ("\\right", ""), ("\\cdot", "·"),
+        ]
+        for (from, to) in map { s = s.replacingOccurrences(of: from, with: to) }
+        // 剩余 \command 与多余花括号清掉
+        let leftover = try! NSRegularExpression(pattern: #"\\[a-zA-Z]+"#)
+        s = replacing(leftover, s) { _ in "" }
+        s = s.replacingOccurrences(of: "{", with: "").replacingOccurrences(of: "}", with: "")
+        let spaces = try! NSRegularExpression(pattern: "[ \t]{2,}")
+        s = replacing(spaces, s) { _ in " " }
+        return s.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// 定稿气泡用：按行给出带加粗标记的分段。
     public static func toRich(_ text: String) -> [RichLine] {
         normalizedLines(text).map { raw in

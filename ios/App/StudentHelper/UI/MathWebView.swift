@@ -96,20 +96,30 @@ struct MathWebView: UIViewRepresentable {
 
 /// 讲稿正文：有公式走 KaTeX，没公式走 AttributedString。
 /// 无公式时根本不建 WebView（省内存，与安卓同一策略）。
+///
+/// KaTeX 资源加载失败时（bundle 里拿不到、JS 被拦、WebContent 被杀），
+/// WebView 会一直量不到高度、卡在 44pt 只显示第一行原始 `\(...\)`。
+/// 这里加了 2.5s 超时：仍没量到就整体降级成「去 LaTeX 的纯文本」，宁可朴素也别露反斜杠。
 struct MathText: View {
     let content: String
     var color: Color = .primary
     @State private var height: CGFloat = 0
+    @State private var renderFailed = false
 
     var body: some View {
         Group {
-            if MarkdownLite.containsLatex(content) {
+            if MarkdownLite.containsLatex(content) && !renderFailed {
                 MathWebView(content: content, color: color) { measured in
                     if measured != height { height = measured }
                 }
                 .frame(width: .infinity, height: height > 0 ? height : 44, alignment: .topLeading)
+                .task(id: content) {
+                    // 2.5s 还没量到高度 = KaTeX 没跑起来，降级
+                    try? await Task.sleep(nanoseconds: 2_500_000_000)
+                    if height <= 0 { renderFailed = true }
+                }
             } else {
-                Text(attributed)
+                Text(renderFailed ? degradedAttributed : attributed)
                     .font(HyperType.body)
                     .lineSpacing(HyperType.bodyLineSpacing)
                     .foregroundStyle(color)
@@ -119,6 +129,21 @@ struct MathText: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .animation(.easeOut(duration: 0.15), value: height)
+    }
+
+    /// 降级文本：去掉 LaTeX 标记，公式变成 7/8、√(x) 这类可读形式
+    private var degradedAttributed: AttributedString {
+        var result = AttributedString()
+        let lines = MarkdownLite.toRich(MarkdownLite.degradeLatex(content))
+        for (index, line) in lines.enumerated() {
+            if index > 0 { result.append(AttributedString("\n")) }
+            for segment in line.segments {
+                var piece = AttributedString(segment.text)
+                if segment.bold { piece.font = .system(size: 17, weight: .bold) }
+                result.append(piece)
+            }
+        }
+        return result
     }
 
     private var attributed: AttributedString {
