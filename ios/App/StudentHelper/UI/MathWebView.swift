@@ -112,11 +112,25 @@ struct MathWebView: UIViewRepresentable {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak webView] in
                 guard let webView else { return }
                 self.probe(webView)
+                self.diagnose(webView)
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) { [weak webView] in
                 guard let webView else { return }
                 self.probe(webView)
             }
+        }
+
+        func webView(
+            _ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error
+        ) {
+            print("[MathWebView] 加载失败: \(error.localizedDescription)")
+        }
+
+        func webView(
+            _ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!,
+            withError error: Error
+        ) {
+            print("[MathWebView] 预加载失败: \(error.localizedDescription)")
         }
 
         private func probe(_ webView: WKWebView) {
@@ -127,6 +141,22 @@ struct MathWebView: UIViewRepresentable {
                 guard next != self.lastHeight else { return }
                 self.lastHeight = next
                 DispatchQueue.main.async { self.onHeight?(next) }
+            }
+        }
+
+        /// 诊断用：KaTeX 到底有没有跑起来（脚本加载失败 / 解析报错都会导致公式保持原文）。
+        func diagnose(_ webView: WKWebView) {
+            let js = """
+            (function(){
+              var ok = (typeof katex !== 'undefined');
+              var rendered = document.querySelectorAll('.katex').length;
+              return ok ? ('katex=ok rendered=' + rendered) : 'katex=MISSING';
+            })();
+            """
+            webView.evaluateJavaScript(js) { result, _ in
+                if let text = result as? String {
+                    print("[MathWebView] \(text)")
+                }
             }
         }
     }
@@ -180,6 +210,10 @@ struct MathText: View {
                 if segment.bold { piece.font = .system(size: 17, weight: .bold) }
                 result.append(piece)
             }
+        }
+        // 截图模式下把「为什么降级」标出来，否则在 CI 里根本看不出 KaTeX 是否加载成功
+        if ScreenshotMode.isActive {
+            result.append(AttributedString("\n[降级]"))
         }
         return result
     }
