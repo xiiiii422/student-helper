@@ -316,6 +316,31 @@ public final class AppStore {
         return imagePaths
     }
 
+    // MARK: 搜索
+
+    /// 全学科搜题：按关键词在提问/回答正文里做大小写不敏感的子串匹配。
+    /// 空查询返回空数组（而不是全部），避免空态页把整个库倒出来。
+    public func searchMessages(query: String, subject: String? = nil, limit: Int = 60) -> [Message] {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !needle.isEmpty else { return [] }
+        return snapshot.messages
+            .filter { subject == nil || $0.subject == subject }
+            .filter {
+                $0.textContent.lowercased().contains(needle)
+            }
+            .sorted { $0.createdAt > $1.createdAt }
+            .prefix(limit)
+            .map { $0 }
+    }
+
+    /// 命中次数按学科汇总，搜索页顶部用来显示「语文 3 · 数学 5」。
+    public func searchSubjectCounts(query: String) -> [String: Int] {
+        let hits = searchMessages(query: query, limit: 100_000)
+        var counts: [String: Int] = [:]
+        for m in hits { counts[m.subject, default: 0] += 1 }
+        return counts
+    }
+
     // MARK: 备份 / 清空
 
     public var backupSnapshot: BackupSnapshot { snapshot }

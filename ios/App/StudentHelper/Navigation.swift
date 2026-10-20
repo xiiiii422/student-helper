@@ -5,6 +5,7 @@ import SHCore
 /// 好处是编译期就能挡住拼错的目的地。
 enum Route: Hashable {
     case favorites
+    case search
     case settings
     case compositionNew
     case compositionDetail(Int)

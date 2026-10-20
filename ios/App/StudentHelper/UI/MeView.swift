@@ -106,6 +106,8 @@ final class MeViewModel: ObservableObject {
     /// 「我的」顶部的存储概览。以前是 body 里现算的计算属性——每次重绘都要扫一遍目录
     /// 并逐文件 stat，改成初始化/导入后刷新一次。
     @Published var storageText = ""
+    /// 学习统计：问了多少题、哪科最多、连续几天。数字全部来自 SHCore.StudyStats。
+    @Published var stats = StudyStats.Summary()
 
     func refreshStorage() {
         let snap = store.backupSnapshot
@@ -117,6 +119,7 @@ final class MeViewModel: ObservableObject {
         }
         storageText = "消息 \(snap.messages.count) 条 · 作文 \(snap.compositions.count) 篇 · "
             + "图片 \(files.count) 张（\(String(format: "%.1f", Double(bytes) / 1024 / 1024)) MB）"
+        stats = StudyStats.summarize(messages: snap.messages)
     }
 
     func clearAll() {
@@ -146,6 +149,7 @@ struct MeView: View {
         ScrollView {
             VStack(spacing: 14) {
                 appCard
+                statsCard
                 themeSection
                 listCard
             }
@@ -205,6 +209,75 @@ struct MeView: View {
         .background(HyperRadius.cardShape.fill(palette.card))
     }
 
+    /// 学习统计卡：提问总数、最常问的学科、连续天数，外加最近 7 天的小柱状图。
+    /// 家长一眼能看出孩子这周到底用没用、哪科问得多。
+    private var statsCard: some View {
+        let stats = vm.stats
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Text("学习统计")
+                    .font(HyperType.titleMedium)
+                    .foregroundStyle(palette.text)
+                Spacer()
+                if stats.streakDays > 0 {
+                    Label("连续 \(stats.streakDays) 天", systemImage: "flame.fill")
+                        .font(HyperType.footnote)
+                        .foregroundStyle(Hyper.miOrange)
+                }
+            }
+
+            HStack(spacing: 0) {
+                statCell(value: "\(stats.totalQuestions)", label: "提问")
+                statCell(value: "\(stats.activeDays)", label: "打卡天数")
+                statCell(
+                    value: stats.topSubject.map { SubjectLabel.of($0) } ?? "—",
+                    label: "问得最多"
+                )
+            }
+
+            // 最近 7 天柱状图：高度按最大值归一，全 0 时给一条平线而不是空框
+            VStack(alignment: .leading, spacing: 4) {
+                let peak = max(stats.last7Days.map(\.questions).max() ?? 0, 1)
+                HStack(alignment: .bottom, spacing: 6) {
+                    ForEach(Array(stats.last7Days.enumerated()), id: \.offset) { _, day in
+                        VStack(spacing: 3) {
+                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                .fill(day.questions > 0 ? Hyper.miBlue : palette.divider)
+                                .frame(
+                                    width: 18,
+                                    height: max(4, 44 * CGFloat(day.questions) / CGFloat(peak))
+                                )
+                            Text(String(day.day.suffix(2)))
+                                .font(.system(size: 9))
+                                .foregroundStyle(palette.textTertiary)
+                        }
+                    }
+                    Spacer()
+                }
+                Text("最近 7 天每天提问数")
+                    .font(HyperType.footnote)
+                    .foregroundStyle(palette.textTertiary)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(HyperRadius.cardShape.fill(palette.card))
+    }
+
+    private func statCell(value: String, label: String) -> some View {
+        VStack(spacing: 3) {
+            Text(value)
+                .font(HyperType.title2)
+                .foregroundStyle(palette.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            Text(label)
+                .font(HyperType.footnote)
+                .foregroundStyle(palette.textSecondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
     private var themeSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("外观")
@@ -229,6 +302,10 @@ struct MeView: View {
         VStack(spacing: 0) {
             MeRow(title: "错题本", icon: "tray.and.arrow.down.fill", tint: Hyper.miBlue) {
                 router.push(.favorites)
+            }
+            divider
+            MeRow(title: "搜题历史", icon: "magnifyingglass", tint: Hyper.miBlue) {
+                router.push(.search)
             }
             divider
             MeRow(title: "模型服务设置", icon: "slider.horizontal.3", tint: Hyper.miBlue) {

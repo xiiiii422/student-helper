@@ -305,6 +305,11 @@ struct RootView: View {
             ))
         case .essay:
             EssayView(vm: EssayViewModel(llm: container.llm, store: container.store))
+        case .search:
+            SearchView(store: container.store) { subject in
+                // 点一条结果：回根再切到对应学科，能接着看完整问答
+                if let tab = BottomTab(rawValue: subject) { selection = tab }
+            }
         }
     }
 }
