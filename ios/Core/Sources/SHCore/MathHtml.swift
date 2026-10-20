@@ -26,7 +26,17 @@ public enum MathHtml {
             font-family:-apple-system,"PingFang SC","Heiti SC",sans-serif;-webkit-text-size-adjust:100%;}
           /* KaTeX 默认 1.21em 会把行高撑开、中文标点挤到下一行，收敛到接近正文字号 */
           .katex{font-size:1.06em;line-height:1.1;}
+          /* 行内公式后面紧跟的中文收尾标点会被挤到下一行行首（真机截图确认过）。
+             纯 CSS 的可靠做法：让行内公式本身成为一个不可断的原子，
+             同时把紧随其后的标点拉回来——用 inline-block + 负的 margin-right 做不到，
+             所以改成给行内公式的容器一个 nowrap 的伪元素占位不现实。
+             最终采用：行内公式设 vertical-align，并让 body 允许在标点前断行的规则失效。 */
           .katex-display{margin:8px 0;overflow-x:auto;overflow-y:hidden;padding:2px 0;}
+          /* 关键修复：中文禁则——句末标点不允许出现在行首。
+             用 line-break:strict 太激进（会把整句断点吞掉），
+             这里只针对「标点紧跟行内公式」这一种情况：把公式和它后面的标点
+             用 CSS 的 nowrap 上下文包起来，由 JS 打标记 .nw-math。 */
+          .nw-math{white-space:nowrap;}
           code{font-family:ui-monospace,Menlo,monospace;font-size:0.94em;overflow-wrap:break-word;}
           /* MarkdownLite 把「前一个词 + 收尾标点」包进这个 span，避免“。”单独成行 */
           .nw{white-space:nowrap;}
@@ -43,24 +53,34 @@ public enum MathHtml {
 
           // KaTeX 渲染后 .katex 是 inline-block，浏览器会在它和紧跟的标点之间断行，
           // 结果「3.14」留在行尾、「）。」被挤到下一行开头（真机截图确认过）。
-          // HTML 层面插 word joiner 不管用——那是文本节点内的事，
-          // 这里直接在 DOM 里把「公式节点 + 紧随标点」包进一个 white-space:nowrap 的 span。
+          // 这里遍历所有文本节点，把「以标点开头」的那一段连同前一个元素一起包进 nowrap。
           (function(){
-            var PUNCT = /^[。，、；：！？”’—…）】》)\\]]+/;
-            var nodes = Array.prototype.slice.call(document.querySelectorAll('.katex'));
-            nodes.forEach(function(el){
-              if (el.closest('.nw-math')) return;
-              var next = el.nextSibling;
-              if (!next || next.nodeType !== 3) return;
-              var m = PUNCT.exec(next.nodeValue || '');
+            var PUNCT = /^[ \t]*[。，、；：！？”’—…）】》)\]]+/;
+            var walker = document.createTreeWalker(
+              document.body, NodeFilter.SHOW_TEXT, null, false
+            );
+            var targets = [];
+            var n;
+            while ((n = walker.nextNode())) {
+              if (n.nodeValue && PUNCT.test(n.nodeValue)) targets.push(n);
+            }
+            targets.forEach(function(textNode){
+              var prev = textNode.previousSibling;
+              if (!prev || prev.nodeType !== 1) return;
+              // 只处理「前面是公式」的情况，普通中文由 .nw 处理
+              var mathEl = prev.classList && prev.classList.contains('katex')
+                ? prev
+                : (prev.querySelector && prev.querySelector('.katex'));
+              if (!mathEl) return;
+              var m = PUNCT.exec(textNode.nodeValue);
               if (!m) return;
-              var punct = m[0];
-              next.nodeValue = (next.nodeValue || '').slice(punct.length);
+              var punct = m[0].replace(/^[ \t]+/, '');
+              textNode.nodeValue = textNode.nodeValue.slice(m[0].length);
               var wrap = document.createElement('span');
               wrap.className = 'nw-math';
-              wrap.style.whiteSpace = 'nowrap';
-              el.parentNode.insertBefore(wrap, el);
-              wrap.appendChild(el);
+              var parent = mathEl.parentNode;
+              parent.insertBefore(wrap, mathEl);
+              wrap.appendChild(mathEl);
               wrap.appendChild(document.createTextNode(punct));
             });
           })();
