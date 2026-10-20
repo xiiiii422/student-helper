@@ -270,6 +270,17 @@ struct FavoritesView: View {
                         chip(SubjectLabel.of(subject), selected: filter == subject) { filter = subject }
                     }
                     Spacer()
+                    if !vm.rows(filter: filter).isEmpty {
+                        Button {
+                            vm.exportText(filter: filter)
+                        } label: {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 15))
+                                .foregroundStyle(Hyper.miBlue)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("导出错题")
+                    }
                 }
                 .padding(.horizontal, 14)
                 .padding(.top, 8)
@@ -288,6 +299,20 @@ struct FavoritesView: View {
         .background(palette.background)
         .navigationTitle("错题本")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: Binding<IdentifiableURL?>(
+            get: { vm.exportUrl.asIdentifiableURL },
+            set: { if $0 == nil { vm.exportUrl = nil } }
+        )) { item in
+            ShareSheet(items: [item.value])
+        }
+        .alert("提示", isPresented: Binding(
+            get: { vm.error != nil },
+            set: { if !$0 { vm.error = nil } }
+        )) {
+            Button("好", role: .cancel) { vm.error = nil }
+        } message: {
+            Text(vm.error ?? "")
+        }
     }
 
     /// 空态说清「怎么进来」，否则学生只会站在这里问错题本有什么用。
@@ -397,6 +422,38 @@ final class FavoritesViewModel: ObservableObject {
     func remove(_ favorite: Favorite) {
         store.toggleFavorite(messageId: favorite.messageId)
         reload()
+    }
+
+    // MARK: 导出
+
+    @Published var exportUrl: URL?
+    @Published var error: String?
+
+    /// 把当前筛选下的错题导出成 txt，走系统分享面板（可存「文件」、发微信、打印）
+    func exportText(filter: String?) {
+        let rows = rows(filter: filter)
+        guard !rows.isEmpty else {
+            error = "当前没有可导出的错题"
+            return
+        }
+        let items = rows.map {
+            FavoritesExport.Item(
+                subject: $0.favorite.subject,
+                question: $0.question,
+                answer: $0.answer,
+                createdAt: $0.favorite.createdAt
+            )
+        }
+        let text = FavoritesExport.render(items: items)
+        let name = "错题本-\(Timestamp.format(Int(Date().timeIntervalSince1970 * 1000)).replacingOccurrences(of: " ", with: "_").replacingOccurrences(of: ":", with: "")).txt"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+        do {
+            try text.write(to: url, atomically: true, encoding: .utf8)
+            exportUrl = url
+            Haptics.success()
+        } catch {
+            self.error = "导出失败：\(error.localizedDescription)"
+        }
     }
 }
 

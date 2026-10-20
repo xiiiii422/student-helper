@@ -41,6 +41,9 @@ struct SearchView: View {
                 }
 
                 if vm.query.trimmingCharacters(in: .whitespaces).isEmpty {
+                    if !vm.recentQueries.isEmpty {
+                        recentSection
+                    }
                     hintState
                 } else if vm.results(filter: filter).isEmpty {
                     emptyState
@@ -55,6 +58,48 @@ struct SearchView: View {
         .background(palette.background)
         .navigationTitle("搜题历史")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// 最近搜过的词：学生常反复查同一类题（比如这周的「分数」），
+    /// 每次重打一遍很烦，这里留最近 8 条，点一下就能复用。
+    private var recentSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("最近搜索")
+                    .font(HyperType.footnote)
+                    .foregroundStyle(palette.textSecondary)
+                Spacer()
+                Button("清除") { vm.clearRecent() }
+                    .font(HyperType.footnote)
+                    .foregroundStyle(palette.textTertiary)
+            }
+            .padding(.horizontal, 14)
+
+            // 流式换行：用 FlowLayout 太绕，直接两行横滑更简单可靠
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(vm.recentQueries, id: \.self) { term in
+                        Button {
+                            vm.query = term
+                            focused = false
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: "clock.arrow.circlepath")
+                                    .font(.system(size: 11))
+                                Text(term).font(HyperType.bodyMedium)
+                            }
+                            .foregroundStyle(palette.text)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(Capsule().fill(palette.card))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 14)
+            }
+        }
+        .padding(.top, 4)
     }
 
     private var searchField: some View {
@@ -153,19 +198,37 @@ struct SearchView: View {
 
 @MainActor
 final class SearchViewModel: ObservableObject {
-    @Published var query: String = "" { didSet { if query != oldValue { reload() } } }
+    @Published var query: String = "" {
+        didSet {
+            if query != oldValue {
+                reload()
+                // 输入停顿后再记历史：边打边记会把「分」「分数」都塞进去
+                scheduleRecord()
+            }
+        }
+    }
     @Published private(set) var hits: [Message] = []
+    /// 最近搜过的词，最多 8 条，最新的在前
+    @Published private(set) var recentQueries: [String] = []
 
     private let store: AppStore
+    private let defaults: UserDefaults
+    private var recordTask: Task<Void, Never>?
 
-    init(store: AppStore, initialQuery: String = "") {
+    private static let recentKey = "search.recent"
+    private static let maxRecent = 8
+
+    init(store: AppStore, initialQuery: String = "", defaults: UserDefaults = .standard) {
         self.store = store
+        self.defaults = defaults
+        self.recentQueries = defaults.stringArray(forKey: Self.recentKey) ?? []
         // CI 截图要能截出「有结果」的搜索态，不然永远只有空态
         if !initialQuery.isEmpty {
             query = initialQuery
         }
         reload()
     }
+
     private func reload() {
         hits = store.searchMessages(query: query)
     }
@@ -177,5 +240,33 @@ final class SearchViewModel: ObservableObject {
 
     func count(subject: String) -> Int {
         store.searchSubjectCounts(query: query)[subject] ?? 0
+    }
+
+    // MARK: 最近搜索
+
+    /// 打字停 0.8 秒后才记一条，避免把每个中间态都存进去
+    private func scheduleRecord() {
+        recordTask?.cancel()
+        let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard term.count >= 2 else { return }
+        recordTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            guard !Task.isCancelled else { return }
+            self?.record(term)
+        }
+    }
+
+    private func record(_ term: String) {
+        var list = recentQueries.filter { $0 != term }
+        list.insert(term, at: 0)
+        if list.count > Self.maxRecent { list = Array(list.prefix(Self.maxRecent)) }
+        recentQueries = list
+        defaults.set(list, forKey: Self.recentKey)
+    }
+
+    func clearRecent() {
+        recentQueries = []
+        defaults.removeObject(forKey: Self.recentKey)
+        Haptics.lightTap()
     }
 }
