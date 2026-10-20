@@ -197,6 +197,9 @@ struct EssayView: View {
         .background(palette.background)
         .navigationTitle("生成作文")
         .navigationBarTitleDisplayMode(.inline)
+        // 离开页面就掐掉生成任务：以前这个 Task 脱离视图生命周期，
+        // 学生等不及退出去别处，请求还会跑完、范文还会悄悄写进作文列表。
+        .onDisappear { vm.cancelGeneration() }
     }
 
     private var inputs: some View {
@@ -240,20 +243,26 @@ struct EssayView: View {
 
     private var generateButton: some View {
         Button {
-            Task { await vm.generate(title: title, requirement: requirement, genre: genre, words: words) }
+            // 生成中再点一次就是停止：长文本要等十几秒，没有出口只能干等
+            if vm.generating { vm.cancelGeneration() }
+            else { vm.start(title: title, requirement: requirement, genre: genre, words: words) }
         } label: {
-            Text(vm.generating ? "生成中…" : "生成范文")
+            Text(vm.generating ? "停止生成" : "生成范文")
                 .font(HyperType.titleMedium)
                 // 禁用态别用「浅色底 + 白字」——在浅色背景上几乎看不见，
                 // 换成灰底深灰字，学生一眼就知道是「还不能点」而不是「按钮坏了」。
-                .foregroundStyle(canGenerate ? Color.white : palette.textTertiary)
+                .foregroundStyle(buttonEnabled ? Color.white : palette.textTertiary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 13)
-                .background(Capsule().fill(canGenerate ? Hyper.composition : palette.divider))
+                .background(Capsule().fill(buttonEnabled ? buttonColor : palette.divider))
         }
         .buttonStyle(.plain)
-        .disabled(!canGenerate)
+        .disabled(!buttonEnabled)
     }
+
+    /// 生成中：按钮本身变成「停止」，所以此时必须可点（不再受标题是否为空影响）
+    private var buttonEnabled: Bool { vm.generating || canGenerate }
+    private var buttonColor: Color { vm.generating ? palette.error : Hyper.composition }
 
     private func resultCard(_ result: EssayViewModel.Result) -> some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -320,17 +329,56 @@ final class EssayViewModel: ObservableObject {
 
     private let llm: LlmService
     private let store: AppStore
+    /// 当前生成任务。留着句柄才能在离开页面/点停止时取消它——
+    /// 以前 Task 是脱离生命周期甩出去跑的，退出去后请求照跑完、范文照写进列表。
+    private var task: Task<Void, Never>?
+    /// 代数守卫。@MainActor 只保证方法之间不并行，`await` 处会让出：
+    /// 用户「点停止 → 马上又点生成」时，旧任务此刻才收尾，若无条件清 task/generating，
+    /// 抹掉的是**新任务**的状态（新任务从此停不掉、按钮还显示生成中）。
+    /// 因此任何对共享状态的写，都要先确认自己仍是当前这一代。
+    private var generation = 0
 
     init(llm: LlmService, store: AppStore) {
         self.llm = llm
         self.store = store
     }
 
-    func generate(title: String, requirement: String, genre: String, words: Int) async {
+    /// 取消生成：掐网络请求，且不清 result（留着上次成果）。
+    func cancelGeneration() {
+        generation += 1
+        task?.cancel()
+        task = nil
+        generating = false
+    }
+
+    /// 启动生成并把任务句柄存下来，这样 cancelGeneration / onDisappear 才掐得住它。
+    func start(title: String, requirement: String, genre: String, words: Int) {
         guard !generating else { return }
+        generation += 1
+        let myGen = generation
         generating = true
+        task = Task { [weak self] in
+            await self?.run(
+                generation: myGen, title: title, requirement: requirement,
+                genre: genre, words: words
+            )
+        }
+    }
+
+    /// 一次生成的实际过程。所有对共享状态的写都先过代数校验。
+    private func run(
+        generation myGen: Int, title: String, requirement: String,
+        genre: String, words: Int
+    ) async {
+        defer {
+            if myGen == generation {
+                generating = false
+                task = nil
+            }
+        }
+        // 排到这条任务之前用户已经取消/重新发起过：整段都不该再动共享状态
+        guard myGen == generation else { return }
         error = nil
-        defer { generating = false }
         do {
             let messages = PromptAssembler.essayMessages(
                 title: title,
@@ -343,6 +391,8 @@ final class EssayViewModel: ObservableObject {
                 userText: messages[1].content,
                 temperature: PromptAssembler.temperature(for: .essay)
             )
+            // 请求返回但用户已经取消/退出：别再写库、别再弹结果，否则就是「悄悄多出一篇」
+            if myGen != generation || Task.isCancelled { return }
             result = Self.parse(raw)
             // 生成的范文也进作文列表，学生改完可以直接送去批改
             store.insert(
@@ -353,7 +403,10 @@ final class EssayViewModel: ObservableObject {
                     aiFeedback: ""
                 )
             )
+        } catch is CancellationError {
+            // 主动取消不算错误，界面上什么都不留
         } catch {
+            if myGen != generation || Task.isCancelled { return }
             self.error = LlmPolicy.friendlyError(
                 (error as? LlmError)?.message ?? error.localizedDescription
             )
