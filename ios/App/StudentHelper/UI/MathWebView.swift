@@ -59,8 +59,46 @@ struct MathWebView: UIViewRepresentable {
         func reload(in web: WKWebView, content: String, colorHex: String) {
             lastHeight = 0
             let html = MathHtml.document(content: content, colorHex: colorHex)
-            // baseURL 指向 bundle 里的 KaTeX 目录，模板里的相对路径才解析得到
-            web.loadHTMLString(html, baseURL: Self.katexDirectoryURL)
+            // 关键：不能用 loadHTMLString(_:baseURL:)。
+            // 那种方式下 WKWebView 对 file:// 相对资源（katex.min.js/css/fonts）的读取权限
+            // 不可靠——真机与模拟器都会静默加载失败，公式永远不渲染，只剩原始 \(...\) 文本。
+            //
+            // 正确做法：把 HTML 与 KaTeX 资源放进**同一个可读目录**，再用 loadFileURL 加载。
+            // KaTeX 在 bundle 里是只读的，所以整个目录先拷进 Caches 一份（首次约 1MB，之后复用），
+            // HTML 也写在那儿，allowingReadAccessTo 只需要这一个目录。
+            guard let workDir = Self.workingDirectory() else {
+                web.loadHTMLString(html, baseURL: nil)
+                return
+            }
+            let page = workDir.appendingPathComponent("page-\(UUID().uuidString).html")
+            do {
+                try html.write(to: page, atomically: true, encoding: .utf8)
+                web.loadFileURL(page, allowingReadAccessTo: workDir)
+            } catch {
+                web.loadHTMLString(html, baseURL: nil)
+            }
+        }
+
+        /// 可写的 KaTeX 工作目录：首次调用把 bundle 里的 KaTeX 整目录拷过来。
+        /// 拷贝失败时退回 bundle 原目录（只读，但至少还能试一次）。
+        static func workingDirectory() -> URL? {
+            let fm = FileManager.default
+            guard let caches = fm.urls(for: .cachesDirectory, in: .userDomainMask).first else {
+                return katexDirectoryURL
+            }
+            let dir = caches.appendingPathComponent("KaTeX", isDirectory: true)
+            if fm.fileExists(atPath: dir.appendingPathComponent("katex.min.js").path) {
+                return dir
+            }
+            guard let source = katexDirectoryURL else { return nil }
+            try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+            if let items = try? fm.contentsOfDirectory(at: source, includingPropertiesForKeys: nil) {
+                for item in items {
+                    try? fm.copyItem(at: item, to: dir.appendingPathComponent(item.lastPathComponent))
+                }
+            }
+            return fm.fileExists(atPath: dir.appendingPathComponent("katex.min.js").path)
+                ? dir : source
         }
 
         /// Assets/KaTeX 目录：与安卓 assets/katex 同一批文件
