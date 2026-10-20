@@ -177,10 +177,22 @@ public enum MarkdownLite {
     }
 
     /// 公式保持原样，标点禁则只作用于非公式片段。
+    ///
+    /// 公式**后面紧跟**的收尾标点会被挤到下一行行首（真机截图确认过）：
+    /// KaTeX 把 `\(...\)` 渲染成 inline-block，标点成了它后面的独立文本节点，
+    /// 浏览器允许在两者之间断行。
+    ///
+    /// 解法：把「公式 + 紧跟标点」放进同一个 `white-space:nowrap` 容器。
+    /// 这样做安全，是因为 auto-render 递归遍历 childNodes 并会合并相邻文本节点
+    /// （源码里 `for(;i&&i.nodeType===Node.TEXT_NODE;)o+=i.textContent`），
+    /// 只要定界符在容器内的文本里连续，就照样能渲染。
     private static func gluePunctuationOutsideMath(_ line: String) -> String {
         let formulaPattern = try! NSRegularExpression(
             pattern: #"(\\\((?:(?!\\\().)*?\\\)|\\\[(?:(?!\\\[).)*?\\\])"#,
             options: [.dotMatchesLineSeparators]
+        )
+        let trailingPunct = try! NSRegularExpression(
+            pattern: #"^[ \t]*([\u3002\uff0c\u3001\uff1b\uff1a\uff01\uff1f\u201d\u2019\u2014\u2026\uff09\u3011\u300b\)\]]+)"#
         )
         var out = ""
         var cursor = 0
@@ -190,8 +202,20 @@ public enum MarkdownLite {
                 with: NSRange(location: cursor, length: m.range.location - cursor)
             )
             out += gluePlain(before)
-            out += ns.substring(with: m.range)
+
+            let formula = ns.substring(with: m.range)
             cursor = NSMaxRange(m.range)
+
+            let rest = ns.substring(from: cursor)
+            if let pm = trailingPunct.firstMatch(
+                in: rest, range: NSRange(location: 0, length: (rest as NSString).length)
+            ), pm.range.location == 0 {
+                let punct = (rest as NSString).substring(with: pm.range(at: 1))
+                out += "<span class=\"nw-math\">\(formula)\(punct)</span>"
+                cursor += pm.range.length
+            } else {
+                out += formula
+            }
         }
         if cursor < ns.length {
             out += gluePlain(ns.substring(with: NSRange(location: cursor, length: ns.length - cursor)))

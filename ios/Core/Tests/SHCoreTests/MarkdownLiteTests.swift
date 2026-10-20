@@ -91,13 +91,15 @@ final class MarkdownLiteTests: XCTestCase {
         XCTAssertTrue(html.contains("\\( 3.14 \\)"), html)
     }
 
-    func test公式后的标点不切断定界符() {
-        // 公式后紧跟标点时，公式文本必须保持连续（不能包 span、不能插零宽字符），
-        // 否则 KaTeX 匹配不到定界符。粘行由 MathHtml 里的 JS 在渲染后处理。
+    func test公式与紧跟标点同处一个不可断单元() {
+        // 真机踩过：公式渲染成 inline-block 后，「）。」被挤到下一行行首。
+        // 解法是把「公式 + 紧跟标点」包进 .nw-math（white-space:nowrap）。
         let html = MarkdownLite.toHtml("取 \\( 3.14 \\)）。")
-        XCTAssertTrue(html.contains("\\( 3.14 \\)"), html)
-        XCTAssertFalse(html.contains("<span class=\"nw\">\\("), html)
-        XCTAssertFalse(html.contains("&#8288;"), "不要插 word joiner：\(html)")
+        XCTAssertTrue(html.contains("<span class=\"nw-math\">"), html)
+        // 关键：公式定界符必须在容器内连续，否则 KaTeX 匹配不到
+        XCTAssertTrue(html.contains("<span class=\"nw-math\">\\( 3.14 \\)）。</span>"), html)
+        // 普通文本仍走 .nw，不受影响
+        XCTAssertTrue(html.contains("<span class=\"nw\">"), html)
     }
 
     func test禁则不破坏LaTeX与实体() {
