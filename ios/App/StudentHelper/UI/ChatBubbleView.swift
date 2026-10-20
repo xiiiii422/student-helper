@@ -80,7 +80,9 @@ struct ChatBubbleView: View {
         .contextMenu { menuItems }
     }
 
-    /// 是否走 KaTeX：只认「真的有公式」，没有就不建 WebView（省内存）
+    /// 是否走 KaTeX：只认「真的有公式」，没有就不建 WebView（省内存）。
+    /// 计算属性本身开销很小（一次字符串查找），关键是它不会改变视图身份；
+    /// 真正要避免的是把 containsLatex 的结果参与 View 的初始化参数。
     private var shouldRenderMath: Bool {
         MarkdownLite.containsLatex(text)
     }

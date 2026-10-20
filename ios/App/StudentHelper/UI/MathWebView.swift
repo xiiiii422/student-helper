@@ -213,8 +213,10 @@ struct MathText: View {
                     }
                 }
                 .task(id: content) {
-                    // 2.5s 还没量到高度 = KaTeX 没跑起来，降级
-                    try? await Task.sleep(nanoseconds: 2_500_000_000)
+                    // 6s 还没量到高度才判定 KaTeX 没跑起来。
+                    // 2.5s 太短：冷启动首次要把 KaTeX 拷进 Caches 再解析 1MB JS，
+                    // 模拟器/真机偏慢时会被误判成失败而错误降级成纯文本。
+                    try? await Task.sleep(nanoseconds: 6_000_000_000)
                     if height <= 0 { renderFailed = true }
                 }
             } else {
