@@ -30,6 +30,8 @@ public enum MathHtml {
           code{font-family:ui-monospace,Menlo,monospace;font-size:0.94em;overflow-wrap:break-word;}
           /* MarkdownLite 把「前一个词 + 收尾标点」包进这个 span，避免“。”单独成行 */
           .nw{white-space:nowrap;}
+          /* 公式 + 紧跟标点的整体，渲染后由页面脚本包上，避免标点掉到下一行行首 */
+          .nw-math{white-space:nowrap;}
           /* 600 比 SwiftUI .bold(700) 弱，两条渲染路径同一句话字重会不一致 */
           b,strong{font-weight:700;}
           p{margin:0 0 2px 0;}
@@ -40,6 +42,33 @@ public enum MathHtml {
             {left:"\\[", right:"\\]", display:true},
             {left:"\\(", right:"\\)", display:false}
           ]});
+        </script>
+        <script>
+          // 公式后紧跟的中文收尾标点会被挤到下一行行首：
+          // auto-render 把 `\(...\)` 换成 inline-block 的 .katex 后，
+          // 标点成了它后面的独立文本节点，浏览器允许在两者之间断行。
+          //
+          // 注意：这段必须单独成一个 <script> 块。
+          // 和 renderMathInElement 放同一个块时，这里任何语法错误都会让整块不执行，
+          // 结果公式根本不渲染（上一版就这么把公式搞挂的）。
+          (function () {
+            var PUNCT = /^[ \t]*[。，、；：！？”’—…）】》)\]]+/;
+            var maths = document.querySelectorAll('.katex:not(.katex-display .katex)');
+            for (var i = 0; i < maths.length; i++) {
+              var el = maths[i];
+              var next = el.nextSibling;
+              if (!next || next.nodeType !== 3) continue;
+              var m = PUNCT.exec(next.nodeValue || '');
+              if (!m) continue;
+              var punct = m[0].replace(/^[ \t]+/, '');
+              next.nodeValue = (next.nodeValue || '').substring(m[0].length);
+              var wrap = document.createElement('span');
+              wrap.className = 'nw-math';
+              el.parentNode.insertBefore(wrap, el);
+              wrap.appendChild(el);
+              wrap.appendChild(document.createTextNode(punct));
+            }
+          })();
         </script>
         </body></html>
         """#
