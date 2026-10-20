@@ -40,6 +40,30 @@ public enum MathHtml {
             {left:"\\[", right:"\\]", display:true},
             {left:"\\(", right:"\\)", display:false}
           ]});
+
+          // KaTeX 渲染后 .katex 是 inline-block，浏览器会在它和紧跟的标点之间断行，
+          // 结果「3.14」留在行尾、「）。」被挤到下一行开头（真机截图确认过）。
+          // HTML 层面插 word joiner 不管用——那是文本节点内的事，
+          // 这里直接在 DOM 里把「公式节点 + 紧随标点」包进一个 white-space:nowrap 的 span。
+          (function(){
+            var PUNCT = /^[。，、；：！？”’—…）】》)\\]]+/;
+            var nodes = Array.prototype.slice.call(document.querySelectorAll('.katex'));
+            nodes.forEach(function(el){
+              if (el.closest('.nw-math')) return;
+              var next = el.nextSibling;
+              if (!next || next.nodeType !== 3) return;
+              var m = PUNCT.exec(next.nodeValue || '');
+              if (!m) return;
+              var punct = m[0];
+              next.nodeValue = (next.nodeValue || '').slice(punct.length);
+              var wrap = document.createElement('span');
+              wrap.className = 'nw-math';
+              wrap.style.whiteSpace = 'nowrap';
+              el.parentNode.insertBefore(wrap, el);
+              wrap.appendChild(el);
+              wrap.appendChild(document.createTextNode(punct));
+            });
+          })();
         </script>
         </body></html>
         """#
