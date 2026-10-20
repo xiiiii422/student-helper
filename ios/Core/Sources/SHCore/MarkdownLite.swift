@@ -177,10 +177,19 @@ public enum MarkdownLite {
     }
 
     /// 公式保持原样，标点禁则只作用于非公式片段。
+    ///
+    /// 但公式**后面紧跟**的收尾标点必须粘住，否则会出现「3.14」在行尾、
+    /// 「）。」被挤到下一行开头——真机上就是这个表现。
+    /// 做法：把标点包进一个 nowrap 的 span，并在它前面插 `&#8288;`（word joiner），
+    /// 这样浏览器不会在公式与标点之间断行，同时公式本身仍是连续文本、KaTeX 照样能渲染。
     private static func gluePunctuationOutsideMath(_ line: String) -> String {
         let formulaPattern = try! NSRegularExpression(
             pattern: #"(\\\((?:(?!\\\().)*?\\\)|\\\[(?:(?!\\\[).)*?\\\])"#,
             options: [.dotMatchesLineSeparators]
+        )
+        // 公式后面紧跟的收尾标点
+        let trailingPunct = try! NSRegularExpression(
+            pattern: #"^[ \t]*([\u3002\uff0c\u3001\uff1b\uff1a\uff01\uff1f\u201d\u2019\u2014\u2026\uff09\u3011\u300b\)\]]+)"#
         )
         var out = ""
         var cursor = 0
@@ -192,6 +201,16 @@ public enum MarkdownLite {
             out += gluePlain(before)
             out += ns.substring(with: m.range)
             cursor = NSMaxRange(m.range)
+
+            // 紧跟在公式后的标点：粘住，避免掉到下一行行首
+            let rest = ns.substring(from: cursor)
+            if let pm = trailingPunct.firstMatch(
+                in: rest, range: NSRange(location: 0, length: (rest as NSString).length)
+            ), pm.range.location == 0 {
+                let punct = (rest as NSString).substring(with: pm.range(at: 1))
+                out += "&#8288;<span class=\"nw\">\(punct)</span>"
+                cursor += pm.range.length
+            }
         }
         if cursor < ns.length {
             out += gluePlain(ns.substring(with: NSRange(location: cursor, length: ns.length - cursor)))

@@ -91,6 +91,13 @@ final class MarkdownLiteTests: XCTestCase {
         XCTAssertTrue(html.contains("\\( 3.14 \\)"), html)
     }
 
+    func test公式后的标点被粘住不掉到下一行() {
+        // 真机踩过：公式渲染成分数后，「）。」被挤到下一行开头
+        let html = MarkdownLite.toHtml("取 \\( 3.14 \\)）。")
+        XCTAssertTrue(html.contains("&#8288;"), "公式后标点要有 word joiner：\(html)")
+        // 公式本身仍必须裸露给 KaTeX
+        XCTAssertFalse(html.contains("<span class=\"nw\">\\("), html)
+    }
     func test禁则不破坏LaTeX与实体() {
         let latex = "面积 \\( S = \\pi r^2 \\) 平方厘米"
         XCTAssertTrue(MarkdownLite.toHtml(latex).contains("\\( S = \\pi r^2 \\)"))
