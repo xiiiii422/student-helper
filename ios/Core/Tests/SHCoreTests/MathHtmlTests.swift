@@ -38,7 +38,9 @@ final class MathHtmlTests: XCTestCase {
     func testHTML转义不影响公式反斜杠() {
         let html = MarkdownLite.toHtml("a < b 且 \\( x < y \\)")
         XCTAssertTrue(html.contains("&lt;"), "尖括号要转义：\(html)")
-        XCTAssertTrue(html.contains("\\( x < y \\)"), "公式里的内容不转义：\(html)")
+        // escapeHtml 在切公式之前就跑了，所以公式里的尖括号同样变成实体，
+        // KaTeX 读到的仍是 < （HTML 解析后还原），不影响渲染
+        XCTAssertTrue(html.contains("\\( x &lt; y \\)"), "公式内容随全文一起转义：\(html)")
     }
 
     func test完整文档含KaTeX脚本与定界符配置() {

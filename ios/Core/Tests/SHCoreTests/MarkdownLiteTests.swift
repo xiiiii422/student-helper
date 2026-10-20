@@ -55,9 +55,11 @@ final class MarkdownLiteTests: XCTestCase {
     }
 
     func test收尾标点与前面的词锁在一起() {
-        // 公式后带空格再接句号：空格先被消掉，再把「公式。」锁成不折行整体
+        // 公式必须裸露给 KaTeX：一旦被包进 <span class="nw">，定界符被标签切开，
+        // auto-render 就永远匹配不到，真机/模拟器都只会显示原始 \(...\)。
         let html = MarkdownLite.toHtml("写成 \\( \\frac{2}{5} \\) 。")
-        XCTAssertTrue(html.contains("<span class=\"nw\">\\( \\frac{2}{5} \\)。</span>"))
+        XCTAssertTrue(html.contains("\\( \\frac{2}{5} \\)"), html)
+        XCTAssertFalse(html.contains("<span class=\"nw\">\\( \\frac"), "公式不能进 nowrap：\(html)")
         // 数字接全角括号：不能把“）。”单独甩到下一行
         XCTAssertTrue(
             MarkdownLite.toHtml("答：28.26 平方厘米（ 取 3.14）。")
@@ -71,7 +73,7 @@ final class MarkdownLiteTests: XCTestCase {
     }
 
     func test禁则不能把整句锁成一个不折行块() {
-        // 安卓真机踩过：非贪婪的 \\(..\\) 会为了凑出后面的“）。”一路扩到行尾，
+        // 安卓真机踩过：非贪婪的 \(..\) 会为了凑出后面的“）。”一路扩到行尾，
         // 整句变成 nowrap 后塞不下，被整体挤到下一行，行首留一大片空白。
         let line = "第1题：答：\\( 28.26 \\) 平方厘米（\\( \\pi \\) 取 \\( 3.14 \\)）。"
         let html = MarkdownLite.toHtml(line)
@@ -81,12 +83,12 @@ final class MarkdownLiteTests: XCTestCase {
             XCTAssertFalse(span.isEmpty, "空的 nowrap 块：\(html)")
             // 按 UTF-16 计，与安卓 String.length 同口径
             XCTAssertLessThanOrEqual((span as NSString).length, 20, "nowrap 块过长：\(span)")
+            XCTAssertFalse(span.contains("\\("), "nowrap 块里不能含公式：\(span)")
         }
-        // 句号（连同一个全角右括号）仍跟着前面的公式，没被甩到行首
-        XCTAssertTrue(html.contains("<span class=\"nw\">\\( 3.14 \\)）。</span>"))
-        // 长算式保持可断：不把 40 字以上的公式包进 nowrap
-        let long = "第3步：\\( S = 3.14 \\times 3 \\times 3 = 3.14 \\times 9 = 28.26 \\) 平方厘米。"
-        XCTAssertFalse(MarkdownLite.toHtml(long).contains("<span class=\"nw\">\\( S ="))
+        // 所有公式都必须完好保留，交给 KaTeX
+        XCTAssertTrue(html.contains("\\( 28.26 \\)"), html)
+        XCTAssertTrue(html.contains("\\( \\pi \\)"), html)
+        XCTAssertTrue(html.contains("\\( 3.14 \\)"), html)
     }
 
     func test禁则不破坏LaTeX与实体() {

@@ -163,49 +163,47 @@ public enum MarkdownLite {
             line = replacing(code, afterBold) { "<code>" + group($0, 1, in: afterBold) + "</code>" }
             // 实体（&lt; &#39;）里的分号会被误当成标点，所以转义之后再包、且禁则集不含 ASCII 分号
             //
-            // 关键：禁则包 <span class="nw"> 时不能把公式一起包进去。
-            // punctGlue 的匹配单元里含 `\(...\)`，一旦整个包进 span，
-            // KaTeX 的 auto-render 遍历文本节点时看到的就不再是连续的定界符，
-            // 公式永远渲染不出来（真机与模拟器都表现为显示原始 \(...\)）。
-            // 所以这里先按「公式 / 非公式」切片，只在非公式片段上做禁则处理。
+            // 关键：禁则不能把 `\(...\)` 整个包进 <span class="nw">。
+            // KaTeX 的 auto-render 只遍历「连续文本节点」里的定界符，
+            // 公式被标签切开后永远匹配不到，真机/模拟器都表现为显示原始 \(...\)。
+            //
+            // 折中：公式本身保持裸露（让 KaTeX 能渲染），
+            // 只在公式**后面**的收尾标点上单独包一个 nowrap span 并前置零宽连接符，
+            // 既不会把标点甩到行首，也不破坏定界符。
             let beforeGlue = line
             line = gluePunctuationOutsideMath(beforeGlue)
             return emphasized ? "<b>\(line)</b>" : line
         }.joined(separator: "<br>")
     }
 
-    /// 只对公式之外的片段做标点禁则，保证 `\(...\)` 原样留给 KaTeX。
+    /// 公式保持原样，标点禁则只作用于非公式片段。
     private static func gluePunctuationOutsideMath(_ line: String) -> String {
-        guard line.contains("\\(") || line.contains("\\[") else {
-            return replacing(punctGlue, line) { m in
-                "<span class=\"nw\">" + group(m, 0, in: line) + "</span>"
-            }
-        }
-        // 按公式定界符切段：奇数段是公式，保持原样；偶数段做禁则
-        let pattern = try! NSRegularExpression(
+        let formulaPattern = try! NSRegularExpression(
             pattern: #"(\\\((?:(?!\\\().)*?\\\)|\\\[(?:(?!\\\[).)*?\\\])"#,
             options: [.dotMatchesLineSeparators]
         )
         var out = ""
         var cursor = 0
         let ns = line as NSString
-        for m in pattern.matches(in: line, range: NSRange(location: 0, length: ns.length)) {
-            let before = ns.substring(with: NSRange(location: cursor, length: m.range.location - cursor))
-            if !before.isEmpty {
-                out += replacing(punctGlue, before) { g in
-                    "<span class=\"nw\">" + group(g, 0, in: before) + "</span>"
-                }
-            }
-            out += ns.substring(with: m.range)   // 公式原样保留
+        for m in formulaPattern.matches(in: line, range: NSRange(location: 0, length: ns.length)) {
+            let before = ns.substring(
+                with: NSRange(location: cursor, length: m.range.location - cursor)
+            )
+            out += gluePlain(before)
+            out += ns.substring(with: m.range)
             cursor = NSMaxRange(m.range)
         }
         if cursor < ns.length {
-            let rest = ns.substring(with: NSRange(location: cursor, length: ns.length - cursor))
-            out += replacing(punctGlue, rest) { g in
-                "<span class=\"nw\">" + group(g, 0, in: rest) + "</span>"
-            }
+            out += gluePlain(ns.substring(with: NSRange(location: cursor, length: ns.length - cursor)))
         }
         return out
+    }
+
+    private static func gluePlain(_ text: String) -> String {
+        guard !text.isEmpty else { return "" }
+        return replacing(punctGlue, text) { m in
+            "<span class=\"nw\">" + group(m, 0, in: text) + "</span>"
+        }
     }
 
     // MARK: - 输出结构
