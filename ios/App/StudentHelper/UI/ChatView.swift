@@ -161,6 +161,7 @@ struct ChatView: View {
                             spokenChunk: speech.speakingSource == msg.textContent
                                 ? speech.spokenChunk : nil,
                             isSpeakingThis: speech.speakingSource == msg.textContent && speech.isSpeaking,
+                            speakProgress: speech.speakingSource == msg.textContent ? speech.progress : nil,
                             // 重新生成中：库里还是原答案，界面用内存草稿覆盖显示，
                             // 失败/被杀进程时原文一直完好
                             liveOverride: msg.id == vm.regenerateTargetId ? vm.regenerateDraft : nil,
@@ -302,6 +303,7 @@ private struct BubbleRow: View {
     /// 重新生成中的实时草稿；非 nil 时界面显示它而不是库里的旧文本
     var liveOverride: String? = nil
     var streamingHint: String? = nil
+    var speakProgress: (Int, Int)? = nil
     let onToggleFavorite: () -> Void
     let onCopy: () -> Void
     let onSpeak: () -> Void
@@ -323,6 +325,7 @@ private struct BubbleRow: View {
             onSpeak: onSpeak,
             spokenChunk: spokenChunk,
             isSpeakingThis: isSpeakingThis,
+            progress: speakProgress,
             onImageClick: onImageClick,
             onDelete: onDelete,
             onRegenerate: message.role == "assistant" ? onRegenerate : nil

@@ -22,6 +22,8 @@ struct ChatBubbleView: View {
     var onSpeak: (() -> Void)? = nil
     var spokenChunk: String? = nil
     var isSpeakingThis: Bool = false
+    /// 朗读进度（当前第几句 / 共几句），仅在这条正在被念时有值
+    var progress: (Int, Int)? = nil
     var onImageClick: (() -> Void)? = nil
     var onDelete: (() -> Void)? = nil
     /// 重新生成这条回答（用前面的提问重跑，结果原地替换）
@@ -128,8 +130,11 @@ struct ChatBubbleView: View {
             if let onCopy {
                 button(icon: "doc.on.doc", label: "复制") { onCopy() }
             }
-            button(icon: "speaker.wave.2", label: "朗读") { onSpeak?() }
-                .foregroundStyle(isSpeakingThis ? palette.accent : palette.textSecondary)
+            button(
+                icon: isSpeakingThis ? "stop.circle.fill" : "speaker.wave.2",
+                label: isSpeakingThis ? "停止朗读" : "朗读"
+            ) { onSpeak?() }
+            .foregroundStyle(isSpeakingThis ? palette.accent : palette.textSecondary)
             if let onToggleFavorite {
                 button(icon: isFavorited ? "heart.fill" : "heart", label: "收藏") {
                     Haptics.lightTap()
@@ -140,8 +145,35 @@ struct ChatBubbleView: View {
             if let onRegenerate {
                 button(icon: "arrow.clockwise", label: "重新生成") { onRegenerate() }
             }
+            // 朗读进度：长回答几十句，只有「在念」没有「念到哪」会让人不知道还剩多久
+            if isSpeakingThis, let progress {
+                speakProgress(progress)
+            }
         }
         .padding(.top, 1)
+    }
+
+    /// 第 3/12 句 + 一条细进度条
+    private func speakProgress(_ progress: (Int, Int)) -> some View {
+        HStack(spacing: 6) {
+            Text("\(progress.0)/\(progress.1)")
+                .font(.system(size: 11))
+                .foregroundStyle(palette.textTertiary)
+                .monospacedDigit()
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(palette.divider)
+                    Capsule()
+                        .fill(palette.accent)
+                        .frame(
+                            width: geo.size.width
+                                * min(1, CGFloat(progress.0) / CGFloat(max(progress.1, 1)))
+                        )
+                }
+            }
+            .frame(width: 44, height: 3)
+        }
+        .padding(.leading, 6)
     }
 
     private func button(icon: String, label: String, action: @escaping () -> Void) -> some View {
