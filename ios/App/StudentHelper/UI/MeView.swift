@@ -155,7 +155,9 @@ struct MeView: View {
             }
             .padding(.horizontal, 14)
             .padding(.top, 6)
-            .padding(.bottom, 24)
+            // 底栏是半透明浮层，内容滚到底时最后几项会被它盖住；
+            // 24pt 不够，按「底栏高度 + Home 指示条」留足
+            .padding(.bottom, 90)
         }
         .background(palette.background)
         .overlay(alignment: .bottom) { toast }
@@ -241,15 +243,19 @@ struct MeView: View {
                 HStack(alignment: .bottom, spacing: 6) {
                     ForEach(Array(stats.last7Days.enumerated()), id: \.offset) { _, day in
                         VStack(spacing: 3) {
+                            // 0 值给 6pt 的浅灰短条，而不是 4pt——太矮会看不见，
+                            // 让人以为整块没渲染出来
                             RoundedRectangle(cornerRadius: 3, style: .continuous)
                                 .fill(day.questions > 0 ? Hyper.miBlue : palette.divider)
                                 .frame(
                                     width: 18,
-                                    height: max(4, 44 * CGFloat(day.questions) / CGFloat(peak))
+                                    height: day.questions > 0
+                                        ? max(10, 44 * CGFloat(day.questions) / CGFloat(peak))
+                                        : 6
                                 )
                             Text(String(day.day.suffix(2)))
                                 .font(.system(size: 9))
-                                .foregroundStyle(palette.textTertiary)
+                                .foregroundStyle(day.questions > 0 ? palette.textSecondary : palette.textTertiary)
                         }
                     }
                     Spacer()

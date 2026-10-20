@@ -138,6 +138,14 @@ enum ScreenshotMode {
     static func seed(into store: AppStore) {
         guard let screen else { return }
         let base = 1_700_000_000_000
+        // 统计卡看的是「最近 7 天」，固定 2023 年的时间戳会让柱状图永远是空的。
+        // 这里给「我的」页单独用相对今天的日期，才能截到真实的柱状图与连续天数。
+        let today = Calendar.current.startOfDay(for: Date())
+        func daysAgo(_ n: Int, hour: Int = 10) -> Int {
+            let d = Calendar.current.date(byAdding: .day, value: -n, to: today)!
+            let withHour = Calendar.current.date(bySettingHour: hour, minute: 0, second: 0, of: d)!
+            return Int(withHour.timeIntervalSince1970 * 1000)
+        }
 
         switch screen {
         case .chatMath:
@@ -152,8 +160,15 @@ enum ScreenshotMode {
         case .chatEmpty:
             break
         case .me, .settings:
-            store.insert(Message(subject: "math", role: "user", textContent: "3/4 + 1/8 = ?", createdAt: base))
-            store.insert(Message(subject: "math", role: "assistant", textContent: "【答案】\n答：\\( \\frac{7}{8} \\)。", createdAt: base + 60_000))
+            // 用相对今天的数据，统计卡的「最近 7 天」和「连续天数」才截得出真实效果
+            store.insert(Message(subject: "math", role: "user", textContent: "3/4 + 1/8 = ?", createdAt: daysAgo(0, hour: 9)))
+            store.insert(Message(subject: "math", role: "assistant", textContent: "【答案】\n答：\\( \\frac{7}{8} \\)。", createdAt: daysAgo(0, hour: 9) + 60_000))
+            store.insert(Message(subject: "math", role: "user", textContent: "一个圆的半径是 3cm，面积是多少？", createdAt: daysAgo(1, hour: 16)))
+            store.insert(Message(subject: "math", role: "assistant", textContent: "【答案】\n答：28.26 平方厘米。", createdAt: daysAgo(1, hour: 16) + 60_000))
+            store.insert(Message(subject: "chinese", role: "user", textContent: "“春风又绿江南岸”里的“绿”字好在哪里？", createdAt: daysAgo(2, hour: 20)))
+            store.insert(Message(subject: "chinese", role: "assistant", textContent: "【答案】\n把春风写成了能看见的东西。", createdAt: daysAgo(2, hour: 20) + 60_000))
+            store.insert(Message(subject: "english", role: "user", textContent: "He ___ (go) to school every day.", createdAt: daysAgo(4, hour: 19)))
+            store.insert(Message(subject: "english", role: "assistant", textContent: "【答案】\ngoes", createdAt: daysAgo(4, hour: 19) + 60_000))
         case .favorites:
             let q = store.insert(Message(subject: "math", role: "user", textContent: "一件衣服打八折后是 120 元，原价多少钱？", createdAt: base))
             let a = store.insert(Message(
@@ -187,10 +202,11 @@ enum ScreenshotMode {
             break
         case .search:
             // 搜索页要有可搜的内容：三科各埋一条，关键词「圆」能命中两条
-            store.insert(Message(subject: "math", role: "user", textContent: "一个圆的半径是 3cm，面积是多少？", createdAt: base))
-            store.insert(Message(subject: "math", role: "assistant", textContent: "【答案】答：28.26 平方厘米。", createdAt: base + 60_000))
-            store.insert(Message(subject: "chinese", role: "user", textContent: "《圆的一周》这篇课文讲了什么？", createdAt: base + 120_000))
-            store.insert(Message(subject: "english", role: "user", textContent: "circle 是什么意思？", createdAt: base + 180_000))
+            store.insert(Message(subject: "math", role: "user", textContent: "一个圆的半径是 3cm，面积是多少？", createdAt: daysAgo(0, hour: 9)))
+            store.insert(Message(subject: "math", role: "assistant", textContent: "【答案】答：28.26 平方厘米。", createdAt: daysAgo(0, hour: 9) + 60_000))
+            store.insert(Message(subject: "chinese", role: "user", textContent: "《圆的一周》这篇课文讲了什么？", createdAt: daysAgo(1, hour: 15)))
+            store.insert(Message(subject: "chinese", role: "assistant", textContent: "【答案】讲了作者观察圆月的感受。", createdAt: daysAgo(1, hour: 15) + 60_000))
+            store.insert(Message(subject: "english", role: "user", textContent: "circle 是什么意思？", createdAt: daysAgo(2, hour: 18)))
         }
     }
 }

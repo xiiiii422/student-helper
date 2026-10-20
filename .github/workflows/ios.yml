@@ -144,7 +144,10 @@ jobs:
             echo "=== $name ==="
             xcrun simctl terminate "$UDID" "$BUNDLE_ID" 2>/dev/null || true
             # 主题也从启动参数注入：浅色/深色都走同一条确定性路径，不依赖模拟器外观
-            xcrun simctl launch "$UDID" "$BUNDLE_ID" -uiTestScreen "$name" -uiTestTheme "$TARGET_APPEARANCE"
+            # 搜索页额外预填关键词，否则永远只能截到空态
+            EXTRA_ARGS=""
+            if [ "$name" = "search" ]; then EXTRA_ARGS="-uiTestQuery 圆"; fi
+            xcrun simctl launch "$UDID" "$BUNDLE_ID" -uiTestScreen "$name" -uiTestTheme "$TARGET_APPEARANCE" $EXTRA_ARGS
             # KaTeX 是异步渲染 + 两次量高，给足时间否则截到半成品
             sleep 7
             xcrun simctl io "$UDID" screenshot "shots/$name.png"
