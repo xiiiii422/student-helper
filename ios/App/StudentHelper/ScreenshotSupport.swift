@@ -21,6 +21,8 @@ enum UITestScreen: String {
     case essay
     /// 搜题历史页
     case search
+    /// 错题本自测出题页
+    case selfTest
     /// 空对话页（「可以这样问」那一屏）
     case chatEmpty
 }
@@ -40,6 +42,9 @@ enum ScreenshotMode {
     }
 
     static var isActive: Bool { screen != nil }
+
+    /// 错题本截图是否直接进自测出题页（否则永远只能截到列表态，出题卡无法验证）
+    static var autoSelfTest: Bool { screen == .selfTest }
 
     /// 截图时预填的搜索关键词（`-uiTestQuery 圆`），让搜索页能截出结果态而不是空态
     static var query: String? {
@@ -171,7 +176,7 @@ enum ScreenshotMode {
             store.insert(Message(subject: "chinese", role: "assistant", textContent: "【答案】\n把春风写成了能看见的东西。", createdAt: daysAgo(2, hour: 20) + 60_000))
             store.insert(Message(subject: "english", role: "user", textContent: "He ___ (go) to school every day.", createdAt: daysAgo(4, hour: 19)))
             store.insert(Message(subject: "english", role: "assistant", textContent: "【答案】\ngoes", createdAt: daysAgo(4, hour: 19) + 60_000))
-        case .favorites:
+        case .favorites, .selfTest:
             let q = store.insert(Message(subject: "math", role: "user", textContent: "一件衣服打八折后是 120 元，原价多少钱？", createdAt: base))
             let a = store.insert(Message(
                 subject: "math", role: "assistant",
@@ -180,6 +185,23 @@ enum ScreenshotMode {
             ))
             _ = q
             store.toggleFavorite(messageId: a.id)
+            // 再埋两条，让顶部「掌握概览」三类数字都非零，截图才看得出这个区块
+            let a2 = store.insert(Message(
+                subject: "chinese", role: "assistant",
+                textContent: "【答案】\n把春风写成了能看见的东西。",
+                createdAt: base + 180_000
+            ))
+            store.insert(Message(subject: "chinese", role: "user", textContent: "“春风又绿江南岸”的“绿”好在哪？", createdAt: base + 120_000))
+            store.toggleFavorite(messageId: a2.id)
+            store.setReviewed(messageId: a2.id, mastered: true)
+            let a3 = store.insert(Message(
+                subject: "english", role: "assistant",
+                textContent: "【答案】\nwent",
+                createdAt: base + 300_000
+            ))
+            store.insert(Message(subject: "english", role: "user", textContent: "He ___ (go) yesterday.", createdAt: base + 240_000))
+            store.toggleFavorite(messageId: a3.id)
+            store.setReviewed(messageId: a3.id, mastered: false)
         case .compositionEmpty:
             break
         case .compositionDetail:

@@ -135,7 +135,7 @@ jobs:
           mkdir -p shots
           REQUESTED="${{ github.event.inputs.screens || 'all' }}"
           if [ "$REQUESTED" = "all" ]; then
-            SCREENS="chatEmpty chatMath chatChinese chatEnglish compositionEmpty compositionDetail favorites settings me essay search"
+            SCREENS="chatEmpty chatMath chatChinese chatEnglish compositionEmpty compositionDetail favorites settings me essay search selfTest"
           else
             SCREENS="$REQUESTED"
           fi

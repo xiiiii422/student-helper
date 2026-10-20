@@ -181,6 +181,7 @@ final class AppContainer: ObservableObject {
         case .me: return (.me, nil)
         case .settings: return (.me, .settings)
         case .favorites: return (.me, .favorites)
+        case .selfTest: return (.me, .favorites)
         case .compositionEmpty: return (.composition, nil)
         case .compositionDetail: return (.composition, .compositionDetail(1))
         case .essay: return (.chinese, .essay)

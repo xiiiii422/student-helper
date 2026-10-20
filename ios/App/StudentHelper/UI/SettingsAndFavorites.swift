@@ -603,6 +603,8 @@ final class FavoritesViewModel: ObservableObject {
     init(store: AppStore) {
         self.store = store
         reload()
+        // CI 截自测出题页：直接进自测态，否则截图永远停在列表
+        if ScreenshotMode.autoSelfTest, !pendingQueue.isEmpty { beginSelfTest() }
     }
 
     func reload() {
