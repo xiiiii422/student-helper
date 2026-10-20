@@ -127,6 +127,12 @@ final class AppContainer: ObservableObject {
         return vm
     }
 
+    /// 清空所有数据前调用：三科若有正在跑的流，先停掉，否则清完还会被写回几条
+    @MainActor
+    func stopAllStreams() {
+        for vm in chatVMCache.values { vm.stopStreaming() }
+    }
+
     init() {
         let settings = SettingsStore()
         self.settings = settings
@@ -259,9 +265,13 @@ struct RootView: View {
             )
             .id("composition")
         case .me:
-            MeView(vm: MeViewModel(
-                llm: container.llm, store: container.store, settings: container.settings
-            ))
+            MeView(vm: {
+                let vm = MeViewModel(
+                    llm: container.llm, store: container.store, settings: container.settings
+                )
+                vm.onStopAllStreams = { container.stopAllStreams() }
+                return vm
+            }())
             .id("me")
         }
     }
@@ -336,53 +346,70 @@ enum BackupError: LocalizedError {
 
 /// 备份：数据 JSON + 图片目录打成一个 zip。文件名与安卓 BackupManager 保持一致，
 /// 这样两端可以互相恢复对方的备份。
+///
+/// 打包/解包要读全部原图并逐条算 CRC，几十张图就是几百 MB 的内存搬运——
+/// 以前全在主线程跑，真机上点「导出」界面直接冻住好几秒，所以整体挪到后台。
 enum BackupService {
 
-    static func export(store: AppStore) throws -> URL {
+    static func export(store: AppStore) async throws -> URL {
         let snapshot = store.backupSnapshot
-        guard !snapshot.messages.isEmpty || !snapshot.compositions.isEmpty || !snapshot.favorites.isEmpty else {
-            throw BackupError.nothingToExport
-        }
-        let enc = JSONEncoder()
-        enc.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let json = try enc.encode(snapshot)
+        let imagesDir = FileStorage.imagesDirectory
+        return try await Task.detached(priority: .userInitiated) {
+            guard !snapshot.messages.isEmpty || !snapshot.compositions.isEmpty || !snapshot.favorites.isEmpty else {
+                throw BackupError.nothingToExport
+            }
+            let enc = JSONEncoder()
+            enc.outputFormatting = [.prettyPrinted, .sortedKeys]
+            let json = try enc.encode(snapshot)
 
-        var entries = [Zip.Entry(name: "data.json", data: json)]
-        let images = (try? FileManager.default.contentsOfDirectory(
-            at: FileStorage.imagesDirectory, includingPropertiesForKeys: nil
-        )) ?? []
-        for name in images {
-            guard let data = try? Data(contentsOf: name) else { continue }
-            entries.append(Zip.Entry(name: "images/" + name.lastPathComponent, data: data))
-        }
+            var entries = [Zip.Entry(name: "data.json", data: json)]
+            let images = (try? FileManager.default.contentsOfDirectory(
+                at: imagesDir, includingPropertiesForKeys: nil
+            )) ?? []
+            for name in images {
+                guard let data = try? Data(contentsOf: name) else { continue }
+                entries.append(Zip.Entry(name: "images/" + name.lastPathComponent, data: data))
+            }
 
-        let stamp = Timestamp.format(Int(Date().timeIntervalSince1970 * 1000))
-            .replacingOccurrences(of: " ", with: "_")
-            .replacingOccurrences(of: "-", with: "")
-            .replacingOccurrences(of: ":", with: "")
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("student-helper-backup-\(stamp).zip")
-        try Zip.write(entries).write(to: url)
-        return url
+            let stamp = Timestamp.format(Int(Date().timeIntervalSince1970 * 1000))
+                .replacingOccurrences(of: " ", with: "_")
+                .replacingOccurrences(of: "-", with: "")
+                .replacingOccurrences(of: ":", with: "")
+                .replacingOccurrences(of: "/", with: "")
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("student-helper-backup-\(stamp)-\(UUID().uuidString.prefix(4)).zip")
+            try Zip.write(entries).write(to: url)
+            return url
+        }.value
     }
 
-    static func importArchive(from url: URL, store: AppStore) throws {
+    static func importArchive(from url: URL, store: AppStore) async throws {
         // 「文件」App 给的是安全作用域资源，必须先 startAccessing 才读得到
         var scoped = false
         if url.isFileURL { scoped = url.startAccessingSecurityScopedResource() }
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
 
-        guard let data = try? Data(contentsOf: url) else { throw BackupError.archiveUnreadable }
-        let entries = try Zip.read(data)
-        guard let jsonEntry = entries.first(where: { $0.name == "data.json" }) else {
-            throw BackupError.archiveUnreadable
-        }
-        let snapshot = try JSONDecoder().decode(BackupSnapshot.self, from: jsonEntry.data)
+        let imagesDir = FileStorage.imagesDirectory
+        let (snapshot, imageFiles) = try await Task.detached(priority: .userInitiated) {
+            guard let data = try? Data(contentsOf: url) else { throw BackupError.archiveUnreadable }
+            let entries = try Zip.read(data)
+            guard let jsonEntry = entries.first(where: { $0.name == "data.json" }) else {
+                throw BackupError.archiveUnreadable
+            }
+            let snapshot = try JSONDecoder().decode(BackupSnapshot.self, from: jsonEntry.data)
 
-        for entry in entries where entry.name.hasPrefix("images/") {
-            let name = String(entry.name.dropFirst("images/".count))
-            guard !name.isEmpty else { continue }
-            try entry.data.write(to: FileStorage.imagesDirectory.appendingPathComponent(name))
+            var files: [(name: String, data: Data)] = []
+            for entry in entries where entry.name.hasPrefix("images/") {
+                // 只取文件名：备份包是外部文件，条目名里塞 "../" 就能写到沙盒外面去
+                let name = (String(entry.name.dropFirst("images/".count)) as NSString).lastPathComponent
+                guard !name.isEmpty, name != ".", name != ".." else { continue }
+                files.append((name, entry.data))
+            }
+            return (snapshot, files)
+        }.value
+
+        for file in imageFiles {
+            try? file.data.write(to: imagesDir.appendingPathComponent(file.name))
         }
         store.replaceAll(with: snapshot)
     }

@@ -15,6 +15,8 @@ final class MeViewModel: ObservableObject {
     @Published var importDone = false
     /// 选好备份文件后先挂起，等用户确认「会覆盖现有数据」再真正导入
     @Published var pendingImportUrl: URL?
+    /// 备份打包/解包进行中（后台跑，按钮显示进度并防重复点）
+    @Published var backupWorking = false
 
     private let llm: LlmService
     private let store: AppStore
@@ -25,6 +27,7 @@ final class MeViewModel: ObservableObject {
         self.store = store
         self.settings = settings
         self.themeMode = ThemeMode(rawValue: settings.themeMode) ?? .system
+        refreshStorage()
     }
 
     func setTheme(_ mode: ThemeMode) {
@@ -54,13 +57,23 @@ final class MeViewModel: ObservableObject {
     // MARK: 备份
 
     /// 导出：数据 JSON + 图片目录打成一个 zip，用系统分享面板存到「文件」或发给自己。
+    /// 打包在后台跑（图多时主线程会冻好几秒），期间按钮显示进行中防重复点。
     func exportBackup() {
-        do {
-            let url = try BackupService.export(store: store)
-            exportUrl = url
-            Haptics.success()
-        } catch {
-            message = "导出失败：\(error.localizedDescription)"
+        guard !backupWorking else { return }
+        backupWorking = true
+        message = "正在打包备份…"
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let url = try await BackupService.export(store: self.store)
+                self.exportUrl = url
+                self.message = nil
+                Haptics.success()
+            } catch {
+                self.message = "导出失败：\(error.localizedDescription)"
+                Haptics.warning()
+            }
+            self.backupWorking = false
         }
     }
 
@@ -70,36 +83,53 @@ final class MeViewModel: ObservableObject {
     }
 
     func confirmImport() {
-        guard let url = pendingImportUrl else { return }
+        guard let url = pendingImportUrl, !backupWorking else { return }
         pendingImportUrl = nil
-        do {
-            try BackupService.importArchive(from: url, store: store)
-            importDone = true
-            // 导入后 onChange 会立刻刷新界面，不需要重启
-            message = "导入完成，已用备份数据替换本机内容"
-            Haptics.success()
-        } catch {
-            message = "导入失败：\(error.localizedDescription)"
-            Haptics.warning()
+        backupWorking = true
+        Task { [weak self] in
+            guard let self else { return }
+            defer { self.backupWorking = false }
+            do {
+                try await BackupService.importArchive(from: url, store: self.store)
+                self.importDone = true
+                // 导入后 onChange 会立刻刷新界面，不需要重启
+                self.message = "导入完成，已用备份数据替换本机内容"
+                self.refreshStorage()
+                Haptics.success()
+            } catch {
+                self.message = "导入失败：\(error.localizedDescription)"
+                Haptics.warning()
+            }
         }
     }
 
-    /// 「我的」顶部的存储概览：让家长知道占了多少空间。
-    var storageSummary: String {
+    /// 「我的」顶部的存储概览。以前是 body 里现算的计算属性——每次重绘都要扫一遍目录
+    /// 并逐文件 stat，改成初始化/导入后刷新一次。
+    @Published var storageText = ""
+
+    func refreshStorage() {
         let snap = store.backupSnapshot
-        let imageCount = (try? FileManager.default.contentsOfDirectory(
-            at: FileStorage.imagesDirectory, includingPropertiesForKeys: nil
-        ))?.count ?? 0
-        let mb = Double(FileStorage.totalImageBytes) / 1024 / 1024
-        return "消息 \(snap.messages.count) 条 · 作文 \(snap.compositions.count) 篇 · "
-            + "图片 \(imageCount) 张（\(String(format: "%.1f", mb)) MB）"
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: FileStorage.imagesDirectory, includingPropertiesForKeys: [.fileSizeKey]
+        )) ?? []
+        let bytes = files.reduce(0) { sum, url in
+            sum + ((try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
+        }
+        storageText = "消息 \(snap.messages.count) 条 · 作文 \(snap.compositions.count) 篇 · "
+            + "图片 \(files.count) 张（\(String(format: "%.1f", Double(bytes) / 1024 / 1024)) MB）"
     }
 
     func clearAll() {
+        // 先停掉三科正在跑的流，否则清完还会被写回几条
+        onStopAllStreams?()
         store.clearAll()
         FileStorage.deleteAllImages()
+        refreshStorage()
         message = "已清空全部数据"
     }
+
+    /// 由根容器注入：清空数据前停掉所有学科的流式任务
+    var onStopAllStreams: (() -> Void)?
 }
 
 /// 「我的」页，逐条对齐安卓 `ui/me/MeScreen.kt`：
@@ -166,7 +196,7 @@ struct MeView: View {
             Text("自用版 · 数据仅存本机")
                 .font(HyperType.bodyMedium)
                 .foregroundStyle(palette.textSecondary)
-            Text(vm.storageSummary)
+            Text(vm.storageText)
                 .font(HyperType.footnote)
                 .foregroundStyle(palette.textTertiary)
         }
