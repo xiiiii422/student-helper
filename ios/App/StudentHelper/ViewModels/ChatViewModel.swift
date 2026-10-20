@@ -23,10 +23,18 @@ final class ChatViewModel: ObservableObject {
     @Published var pendingOcr: PendingOcr? = nil
     @Published var error: String? = nil
 
+    /// 正在被重新生成的消息 id。重生成期间**不动数据库**（原答案留在库里），
+    /// 新答案先在内存里流式显示，成功才落库——这样中途被杀进程/切走也不会丢原文。
+    @Published private(set) var regenerateTargetId: Int? = nil
+    @Published private(set) var regenerateDraft: String? = nil
+
     private let store: AppStore
     private let llm: LlmService
     private let speech: SpeechService
     private var streamTask: Task<Void, Never>?
+    /// AsyncThrowingStream 被取消时 next() 只是返回 nil，不会抛 CancellationError，
+    /// 所以「用户点了停止」必须自己记标志，否则停止会被当成正常完成（震动+自动朗读半截话）。
+    private var stopRequested = false
 
     /// Room 落盘最小间隔，与安卓 FLUSH_INTERVAL_MS 同值：流式期间不每字写盘。
     private static let flushIntervalNanos: UInt64 = 300_000_000
@@ -81,6 +89,7 @@ final class ChatViewModel: ObservableObject {
         gradeMode: Bool = false
     ) {
         guard !streaming else { return }
+        stopRequested = false
         streaming = true
         liveAssistantText = ""
         sendFailure = nil
@@ -150,6 +159,8 @@ final class ChatViewModel: ObservableObject {
             }
 
             // finally：一个字都没有就把占位删掉，别留僵尸气泡
+            let stopped = self.stopRequested
+            self.stopRequested = false
             if accumulated.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 self.store.deleteMessage(id: placeholder.id)
             } else {
@@ -158,10 +169,13 @@ final class ChatViewModel: ObservableObject {
             self.streaming = false
             self.liveAssistantText = nil
             self.statusHint = nil
-            self.sendFailure = failure
+            // 用户主动停止不算失败，也不该播成功触感/自动朗读半截话
+            self.sendFailure = stopped ? nil : failure
             self.reload()
-            Haptics.success()
-            if failure == nil, self.speech.autoSpeak { self.speech.speak(accumulated) }
+            if !stopped && failure == nil {
+                Haptics.success()
+                if self.speech.autoSpeak { self.speech.speak(accumulated) }
+            }
         }
     }
 
@@ -189,21 +203,19 @@ final class ChatViewModel: ObservableObject {
         let images = [question.imageUri.flatMap { ImageCodec.base64FromFile(path: $0) }].compactMap { $0 }
 
         streaming = true
+        stopRequested = false
         liveAssistantText = nil
         sendFailure = nil
         statusHint = nil
         speech.stop()
-
-        var placeholder = original
-        placeholder.textContent = ""
-        placeholder.isStreaming = true
-        store.update(placeholder)
-        reload()
+        // 界面用 regenerateTargetId + regenerateDraft 覆盖显示，成功才落库。
+        // 这样中途切走、杀进程、失败，原答案都还在库里，不会被清空覆盖掉。
+        regenerateTargetId = messageId
+        regenerateDraft = ""
 
         streamTask = Task { [weak self] in
             guard let self else { return }
             var accumulated = ""
-            var lastFlush = UInt64(0)
             var failure: String?
 
             let signals = LlmService.Signals(
@@ -227,35 +239,36 @@ final class ChatViewModel: ObservableObject {
                 for try await delta in stream {
                     accumulated += delta
                     if self.statusHint != nil { self.statusHint = nil }
-                    let now = DispatchTime.now().uptimeNanoseconds
-                    if now - lastFlush >= Self.flushIntervalNanos {
-                        lastFlush = now
-                        self.store.update(Self.finalized(placeholder, text: accumulated, streaming: true))
-                    }
+                    self.regenerateDraft = accumulated
                 }
             } catch is CancellationError {
-                // 用户点了停止：保留已生成的部分
+                // 兼容旧行为：极少数路径确实会抛取消
             } catch {
-                failure = LlmPolicy.friendlyError(
-                    (error as? LlmError)?.message ?? error.localizedDescription
-                )
+                if !self.stopRequested {
+                    failure = LlmPolicy.friendlyError(
+                        (error as? LlmError)?.message ?? error.localizedDescription
+                    )
+                }
             }
 
-            // 一个字都没生成出来就恢复原答案，绝不能让「重新生成」把好答案弄丢
+            let stopped = self.stopRequested
             let produced = accumulated.trimmingCharacters(in: .whitespacesAndNewlines)
-            if failure != nil || produced.isEmpty {
-                // 出错或没生成出东西：恢复原文，绝不让「重新生成」把好答案弄丢
-                self.store.update(Self.finalized(original, text: original.textContent, streaming: false))
-            } else {
+            // 成功且真的有内容才落库；停止时保留已生成的部分（用户主动停的，半截也算数）
+            if failure == nil && (!produced.isEmpty) {
                 self.store.update(Self.finalized(original, text: accumulated, streaming: false))
             }
             self.streaming = false
             self.statusHint = nil
             self.sendFailure = nil
+            self.stopRequested = false
+            self.regenerateTargetId = nil
+            self.regenerateDraft = nil
             self.reload()
             if let failure {
                 self.error = "重新生成失败：\(failure)"
                 Haptics.warning()
+            } else if stopped {
+                // 用户主动停止：不播成功触感、不自动朗读半截话
             } else {
                 Haptics.success()
                 if self.speech.autoSpeak { self.speech.speak(accumulated) }
@@ -264,6 +277,7 @@ final class ChatViewModel: ObservableObject {
     }
 
     func stopStreaming() {
+        stopRequested = true
         streamTask?.cancel()
     }
 
@@ -295,7 +309,14 @@ final class ChatViewModel: ObservableObject {
         reload()
     }
 
-    func speak(_ text: String) { speech.speak(text) }
+    func speak(_ text: String) {
+        // 再点一次正在念的那条 = 停止；以前只能开始不能停止
+        if speech.speakingSource == text, speech.isSpeaking {
+            speech.stop()
+        } else {
+            speech.speak(text)
+        }
+    }
     func stopSpeaking() { speech.stop() }
 
     func consumeError() { error = nil }

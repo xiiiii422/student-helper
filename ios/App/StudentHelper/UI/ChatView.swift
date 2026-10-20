@@ -5,7 +5,8 @@ import SHCore
 /// 三科共用聊天页，对齐安卓 `ui/shared/ChatScreen.kt`：
 /// 大标题、iMessage 气泡、空态例题、失败常驻卡片、追问快捷入口、流式吸底。
 struct ChatView: View {
-    @StateObject private var vm: ChatViewModel
+    /// VM 由 AppContainer 持有并注入：切 Tab 不再销毁它，流式回答不会因为切走丢失
+    @ObservedObject var vm: ChatViewModel
     let title: String
     @Binding var tabSelection: BottomTab
 
@@ -18,16 +19,20 @@ struct ChatView: View {
 
     @Environment(\.hyperPalette) private var palette
     @EnvironmentObject private var router: Router
+    /// 订阅朗读状态：以前气泡永远传 spokenChunk=nil，既没有「正在念」高亮，
+    /// 菜单也永远显示「朗读这条」而不是「停止」，用户根本停不下来。
+    @EnvironmentObject private var speech: SpeechService
 
     init(
         title: String,
         subject: String,
         tabSelection: Binding<BottomTab>,
-        makeViewModel: @escaping (String) -> ChatViewModel
+        vm: ChatViewModel
     ) {
         self.title = title
         self._tabSelection = tabSelection
-        self._vm = StateObject(wrappedValue: makeViewModel(subject))
+        self.vm = vm
+        precondition(vm.subject == subject, "ChatView 的 subject 必须与注入的 VM 一致")
     }
 
     private var accent: Color { SubjectColor.forSubject(vm.subject) }
@@ -153,7 +158,13 @@ struct ChatView: View {
                             message: msg,
                             subject: vm.subject,
                             isFavorited: vm.favoritedIds.contains(msg.id),
-                            spokenChunk: nil,
+                            spokenChunk: speech.speakingSource == msg.textContent
+                                ? speech.spokenChunk : nil,
+                            isSpeakingThis: speech.speakingSource == msg.textContent && speech.isSpeaking,
+                            // 重新生成中：库里还是原答案，界面用内存草稿覆盖显示，
+                            // 失败/被杀进程时原文一直完好
+                            liveOverride: msg.id == vm.regenerateTargetId ? vm.regenerateDraft : nil,
+                            streamingHint: msg.id == vm.regenerateTargetId ? vm.statusHint : nil,
                             onToggleFavorite: { vm.toggleFavorite(messageId: msg.id) },
                             onCopy: { UIPasteboard.general.string = msg.textContent },
                             onSpeak: { vm.speak(msg.textContent) },
@@ -176,8 +187,9 @@ struct ChatView: View {
                         .id("streaming")
                     }
 
-                    if let tail = vm.messages.last, !vm.streaming,
-                       vm.sendFailure != nil || tail.role == "user" {
+                    // 失败卡只在真的有失败时出现；以前 tail 是 user 就弹，
+                    // 删掉失败提问后卡片会一直赖着，点重试还会把更早的好答案重发一遍
+                    if vm.sendFailure != nil, !vm.streaming {
                         SendFailureRow(
                             reason: vm.sendFailure ?? "上一次没能回答成功",
                             onRetry: { vm.retryLast() }
@@ -199,6 +211,9 @@ struct ChatView: View {
             .onChange(of: vm.liveAssistantText?.count ?? 0) { _ in
                 scrollToBottom(proxy)
             }
+            .onChange(of: vm.regenerateDraft?.count ?? 0) { _ in
+                scrollToBottom(proxy)
+            }
             .onChange(of: vm.messages.count) { _ in scrollToBottom(proxy) }
             .onAppear { scrollToBottom(proxy) }
         }
@@ -207,6 +222,7 @@ struct ChatView: View {
     private func scrollToBottom(_ proxy: ScrollViewProxy) {
         let target: AnyHashable
         if vm.liveAssistantText != nil { target = "streaming" }
+        else if let regeneratingId = vm.regenerateTargetId { target = AnyHashable(regeneratingId) }
         else if vm.sendFailure != nil { target = "failure" }
         else if let last = vm.messages.last { target = AnyHashable(last.id) }
         else { target = AnyHashable("") }
@@ -282,6 +298,10 @@ private struct BubbleRow: View {
     let subject: String
     let isFavorited: Bool
     let spokenChunk: String?
+    var isSpeakingThis: Bool = false
+    /// 重新生成中的实时草稿；非 nil 时界面显示它而不是库里的旧文本
+    var liveOverride: String? = nil
+    var streamingHint: String? = nil
     let onToggleFavorite: () -> Void
     let onCopy: () -> Void
     let onSpeak: () -> Void
@@ -292,15 +312,17 @@ private struct BubbleRow: View {
     var body: some View {
         ChatBubbleView(
             role: message.role,
-            text: message.textContent,
+            text: liveOverride ?? message.textContent,
             subject: subject,
             imageUri: message.imageUri,
-            isStreaming: false,
+            isStreaming: liveOverride != nil,
+            statusHint: streamingHint,
             isFavorited: isFavorited,
             onToggleFavorite: message.role == "assistant" ? onToggleFavorite : nil,
             onCopy: onCopy,
             onSpeak: onSpeak,
             spokenChunk: spokenChunk,
+            isSpeakingThis: isSpeakingThis,
             onImageClick: onImageClick,
             onDelete: onDelete,
             onRegenerate: message.role == "assistant" ? onRegenerate : nil

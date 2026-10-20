@@ -107,6 +107,26 @@ final class AppContainer: ObservableObject {
     let initialTab: BottomTab?
     let initialRoute: Route?
 
+    /// 三科的 ChatViewModel 常驻在这里，而不是每个 Tab 页面自己 @StateObject。
+    ///
+    /// 以前切 Tab 会销毁 ChatView，连带销毁正在跑流式的 VM：旧 Task 拿着已死的 VM
+    /// 继续写库，回到该科时新 VM 的 cleanupStale 又把空占位删掉，回答就静默丢了。
+    /// VM 提升到容器后与 App 同生命周期，切走切回都只是换视图，流不受影响。
+    ///
+    /// 故意不用 @Published：VM 自身是 ObservableObject，视图拿 @ObservedObject 订阅即可；
+    /// 在 body 里写 @Published 会触发「view update 期间发布变更」的警告甚至循环。
+    private var chatVMCache: [String: ChatViewModel] = [:]
+
+    @MainActor
+    func chatVM(for subject: String) -> ChatViewModel {
+        if let existing = chatVMCache[subject] { return existing }
+        let vm = ChatViewModel(
+            subject: subject, store: store, llm: llm, speech: speech
+        )
+        chatVMCache[subject] = vm
+        return vm
+    }
+
     init() {
         let settings = SettingsStore()
         self.settings = settings
@@ -250,15 +270,9 @@ struct RootView: View {
         ChatView(
             title: title,
             subject: subject,
-            tabSelection: $selection
-        ) { topic in
-            ChatViewModel(
-                subject: topic,
-                store: container.store,
-                llm: container.llm,
-                speech: container.speech
-            )
-        }
+            tabSelection: $selection,
+            vm: container.chatVM(for: subject)
+        )
         .id(subject)
     }
 

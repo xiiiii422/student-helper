@@ -21,6 +21,9 @@ final class SpeechService: NSObject, ObservableObject {
     /// 当前正在念的那句，气泡用它做高亮；念完清空。
     @Published private(set) var spokenChunk: String?
     @Published private(set) var progress: (Int, Int)? = nil
+    /// 本次朗读的**完整来源文本**：气泡靠它判断「正在念的是不是我这条」，
+    /// 以前 ChatView 永远传 spokenChunk=nil，导致既没有高亮也看不出哪条在念。
+    @Published private(set) var speakingSource: String?
 
     /// 语速：0.45 接近老师讲课的节奏（系统默认 0.5 偏快，0.35 又拖沓）。
     @Published var rate: Float {
@@ -84,6 +87,7 @@ final class SpeechService: NSObject, ObservableObject {
         stop()
         let parsed = SpeechText.chunks(text)
         guard !parsed.isEmpty else { return }
+        speakingSource = text
         chunks = parsed
         cursor = 0
         activateSession()
@@ -117,6 +121,7 @@ final class SpeechService: NSObject, ObservableObject {
         isPaused = false
         spokenChunk = nil
         progress = nil
+        speakingSource = nil
         deactivateSession()
     }
 
@@ -127,6 +132,7 @@ final class SpeechService: NSObject, ObservableObject {
             spokenChunk = nil
             progress = nil
             currentUtterance = nil
+            speakingSource = nil
             deactivateSession()
             return
         }
@@ -223,6 +229,7 @@ extension SpeechService: AVSpeechSynthesizerDelegate {
             self.isSpeaking = false
             self.spokenChunk = nil
             self.progress = nil
+            self.speakingSource = nil
             self.deactivateSession()
         }
     }
