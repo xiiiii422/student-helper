@@ -97,7 +97,7 @@ final class MarkdownLiteTests: XCTestCase {
         let html = MarkdownLite.toHtml("取 \\( 3.14 \\)）。")
         XCTAssertTrue(html.contains("\\( 3.14 \\)"), html)
         XCTAssertFalse(html.contains("<span class=\"nw\">\\("), html)
-        XCTAssertFalse(html.contains("&#8288;"), "不要再插 word joiner：\(html)")
+        XCTAssertFalse(html.contains("&#8288;"), "不要插 word joiner：\(html)")
     }
 
     func test禁则不破坏LaTeX与实体() {

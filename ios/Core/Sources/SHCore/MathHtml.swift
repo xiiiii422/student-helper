@@ -32,10 +32,9 @@ public enum MathHtml {
              所以改成给行内公式的容器一个 nowrap 的伪元素占位不现实。
              最终采用：行内公式设 vertical-align，并让 body 允许在标点前断行的规则失效。 */
           .katex-display{margin:8px 0;overflow-x:auto;overflow-y:hidden;padding:2px 0;}
-          /* 关键修复：中文禁则——句末标点不允许出现在行首。
-             用 line-break:strict 太激进（会把整句断点吞掉），
-             这里只针对「标点紧跟行内公式」这一种情况：把公式和它后面的标点
-             用 CSS 的 nowrap 上下文包起来，由 JS 打标记 .nw-math。 */
+          /* 行内公式后面紧跟的中文收尾标点会被挤到下一行行首（真机截图确认过）。
+             解法见 MarkdownLite.gluePunctuationOutsideMath：
+             公式裸露（KaTeX 要连续定界符），紧跟的标点包进 .nw-math 并与其贴合。 */
           .nw-math{white-space:nowrap;}
           code{font-family:ui-monospace,Menlo,monospace;font-size:0.94em;overflow-wrap:break-word;}
           /* MarkdownLite 把「前一个词 + 收尾标点」包进这个 span，避免“。”单独成行 */
@@ -50,40 +49,6 @@ public enum MathHtml {
             {left:"\\[", right:"\\]", display:true},
             {left:"\\(", right:"\\)", display:false}
           ]});
-
-          // KaTeX 渲染后 .katex 是 inline-block，浏览器会在它和紧跟的标点之间断行，
-          // 结果「3.14」留在行尾、「）。」被挤到下一行开头（真机截图确认过）。
-          // 这里遍历所有文本节点，把「以标点开头」的那一段连同前一个元素一起包进 nowrap。
-          (function(){
-            var PUNCT = /^[ \t]*[。，、；：！？”’—…）】》)\]]+/;
-            var walker = document.createTreeWalker(
-              document.body, NodeFilter.SHOW_TEXT, null, false
-            );
-            var targets = [];
-            var n;
-            while ((n = walker.nextNode())) {
-              if (n.nodeValue && PUNCT.test(n.nodeValue)) targets.push(n);
-            }
-            targets.forEach(function(textNode){
-              var prev = textNode.previousSibling;
-              if (!prev || prev.nodeType !== 1) return;
-              // 只处理「前面是公式」的情况，普通中文由 .nw 处理
-              var mathEl = prev.classList && prev.classList.contains('katex')
-                ? prev
-                : (prev.querySelector && prev.querySelector('.katex'));
-              if (!mathEl) return;
-              var m = PUNCT.exec(textNode.nodeValue);
-              if (!m) return;
-              var punct = m[0].replace(/^[ \t]+/, '');
-              textNode.nodeValue = textNode.nodeValue.slice(m[0].length);
-              var wrap = document.createElement('span');
-              wrap.className = 'nw-math';
-              var parent = mathEl.parentNode;
-              parent.insertBefore(wrap, mathEl);
-              wrap.appendChild(mathEl);
-              wrap.appendChild(document.createTextNode(punct));
-            });
-          })();
         </script>
         </body></html>
         """#
