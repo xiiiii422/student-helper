@@ -98,8 +98,8 @@ final class MarkdownLiteTests: XCTestCase {
         XCTAssertTrue(html.contains("<span class=\"nw-math\">"), html)
         // 关键：公式定界符必须在容器内连续，否则 KaTeX 匹配不到
         XCTAssertTrue(html.contains("<span class=\"nw-math\">\\( 3.14 \\)）。</span>"), html)
-        // 普通文本仍走 .nw，不受影响
-        XCTAssertTrue(html.contains("<span class=\"nw\">"), html)
+        // 普通中文+标点仍走 .nw
+        XCTAssertTrue(MarkdownLite.toHtml("这是题目。").contains("<span class=\"nw\">"), "普通文本要有 nw")
     }
 
     func test禁则不破坏LaTeX与实体() {
