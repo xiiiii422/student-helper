@@ -177,17 +177,11 @@ public enum MarkdownLite {
     }
 
     /// 公式保持原样，标点禁则只作用于非公式片段。
-    ///
-    /// 公式**后面紧跟**的收尾标点：去掉中间的空格让它紧贴公式即可。
-    /// 不再额外包 span —— KaTeX 的 auto-render 按文本节点扫描，
-    /// 任何包裹都可能把 `\(...\)` 与后面的标点切到不同节点，
-    /// 而浏览器在 inline-block 与标点之间的断行，靠「无空格紧贴」已经能规避大半。
     private static func gluePunctuationOutsideMath(_ line: String) -> String {
         let formulaPattern = try! NSRegularExpression(
             pattern: #"(\\\((?:(?!\\\().)*?\\\)|\\\[(?:(?!\\\[).)*?\\\])"#,
             options: [.dotMatchesLineSeparators]
         )
-        let trailingSpace = try! NSRegularExpression(pattern: #"^[ \t]+"#)
         var out = ""
         var cursor = 0
         let ns = line as NSString
@@ -198,14 +192,6 @@ public enum MarkdownLite {
             out += gluePlain(before)
             out += ns.substring(with: m.range)
             cursor = NSMaxRange(m.range)
-
-            // 公式后若只有空白再接标点，把空白吃掉，让标点紧贴公式
-            let rest = ns.substring(from: cursor)
-            if let sm = trailingSpace.firstMatch(
-                in: rest, range: NSRange(location: 0, length: (rest as NSString).length)
-            ), sm.range.location == 0 {
-                cursor += sm.range.length
-            }
         }
         if cursor < ns.length {
             out += gluePlain(ns.substring(with: NSRange(location: cursor, length: ns.length - cursor)))
