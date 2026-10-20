@@ -26,16 +26,7 @@ public enum MathHtml {
             font-family:-apple-system,"PingFang SC","Heiti SC",sans-serif;-webkit-text-size-adjust:100%;}
           /* KaTeX 默认 1.21em 会把行高撑开、中文标点挤到下一行，收敛到接近正文字号 */
           .katex{font-size:1.06em;line-height:1.1;}
-          /* 行内公式后面紧跟的中文收尾标点会被挤到下一行行首（真机截图确认过）。
-             纯 CSS 的可靠做法：让行内公式本身成为一个不可断的原子，
-             同时把紧随其后的标点拉回来——用 inline-block + 负的 margin-right 做不到，
-             所以改成给行内公式的容器一个 nowrap 的伪元素占位不现实。
-             最终采用：行内公式设 vertical-align，并让 body 允许在标点前断行的规则失效。 */
           .katex-display{margin:8px 0;overflow-x:auto;overflow-y:hidden;padding:2px 0;}
-          /* 行内公式后面紧跟的中文收尾标点会被挤到下一行行首（真机截图确认过）。
-             解法见 MarkdownLite.gluePunctuationOutsideMath：
-             公式裸露（KaTeX 要连续定界符），紧跟的标点包进 .nw-math 并与其贴合。 */
-          .nw-math{white-space:nowrap;}
           code{font-family:ui-monospace,Menlo,monospace;font-size:0.94em;overflow-wrap:break-word;}
           /* MarkdownLite 把「前一个词 + 收尾标点」包进这个 span，避免“。”单独成行 */
           .nw{white-space:nowrap;}
