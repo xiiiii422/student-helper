@@ -63,7 +63,10 @@ struct ChatBubbleView: View {
                     .font(HyperType.body)
                     .lineSpacing(HyperType.bodyLineSpacing)
                     .foregroundStyle(textColor)
-            } else if subject == "math" && MarkdownLite.containsLatex(text) {
+            } else if shouldRenderMath {
+                // 只要正文里真有 \(...\) / \[...\] 就走 KaTeX，不再按学科判断：
+                // 语文的文言文断句、英语的语法公式都可能带 LaTeX，
+                // 以前非数学学科会把 \( \frac{1}{2} \) 原样显示成一堆反斜杠。
                 MathText(content: text, color: textColor)
             } else {
                 RichText(text: text, color: textColor, highlight: isUser ? nil : spokenChunk)
@@ -75,6 +78,11 @@ struct ChatBubbleView: View {
         .background(bubbleColor)
         .clipShape(BubbleShape.forUser(isUser))
         .contextMenu { menuItems }
+    }
+
+    /// 是否走 KaTeX：只认「真的有公式」，没有就不建 WebView（省内存）
+    private var shouldRenderMath: Bool {
+        MarkdownLite.containsLatex(text)
     }
 
     /// 流式且还没有内容：三点指示器；退避重试时附一行小字，免得长等待被当成死机。
