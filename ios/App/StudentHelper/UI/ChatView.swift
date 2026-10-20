@@ -145,6 +145,30 @@ struct ChatView: View {
         }
     }
 
+    /// 单条消息的渲染。抽成独立方法是因为参数太多，写在 ForEach 里
+    /// 会让 Swift 的类型推导超时（compiler unable to type-check in reasonable time）。
+    @ViewBuilder
+    private func bubbleRow(_ msg: Message) -> some View {
+        let isSpeaking = speech.speakingSource == msg.textContent
+        let isRegenerating = msg.id == vm.regenerateTargetId
+        BubbleRow(
+            message: msg,
+            subject: vm.subject,
+            isFavorited: vm.favoritedIds.contains(msg.id),
+            spokenChunk: isSpeaking ? speech.spokenChunk : nil,
+            isSpeakingThis: isSpeaking && speech.isSpeaking,
+            speakProgress: isSpeaking ? speech.progress : nil,
+            liveOverride: isRegenerating ? vm.regenerateDraft : nil,
+            streamingHint: isRegenerating ? vm.statusHint : nil,
+            onToggleFavorite: { vm.toggleFavorite(messageId: msg.id) },
+            onCopy: { UIPasteboard.general.string = msg.textContent },
+            onSpeak: { vm.speak(msg.textContent) },
+            onImageClick: msg.imageUri.map { uri in { previewUri = uri } },
+            onDelete: { pendingDelete = msg },
+            onRegenerate: msg.role == "assistant" ? { vm.regenerate(messageId: msg.id) } : nil
+        )
+    }
+
     private var messageList: some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -154,27 +178,8 @@ struct ChatView: View {
                         if showTime {
                             TimestampRow(text: Timestamp.format(msg.createdAt))
                         }
-                        BubbleRow(
-                            message: msg,
-                            subject: vm.subject,
-                            isFavorited: vm.favoritedIds.contains(msg.id),
-                            spokenChunk: speech.speakingSource == msg.textContent
-                                ? speech.spokenChunk : nil,
-                            isSpeakingThis: speech.speakingSource == msg.textContent && speech.isSpeaking,
-                            speakProgress: speech.speakingSource == msg.textContent ? speech.progress : nil,
-                            // 重新生成中：库里还是原答案，界面用内存草稿覆盖显示，
-                            // 失败/被杀进程时原文一直完好
-                            liveOverride: msg.id == vm.regenerateTargetId ? vm.regenerateDraft : nil,
-                            streamingHint: msg.id == vm.regenerateTargetId ? vm.statusHint : nil,
-                            onToggleFavorite: { vm.toggleFavorite(messageId: msg.id) },
-                            onCopy: { UIPasteboard.general.string = msg.textContent },
-                            onSpeak: { vm.speak(msg.textContent) },
-                            onImageClick: msg.imageUri.map { uri in { previewUri = uri } },
-                            onDelete: { pendingDelete = msg },
-                            onRegenerate: msg.role == "assistant"
-                                ? { vm.regenerate(messageId: msg.id) } : nil
-                        )
-                        .id(msg.id)
+                        bubbleRow(msg)
+                            .id(msg.id)
                     }
 
                     if let live = vm.liveAssistantText {
