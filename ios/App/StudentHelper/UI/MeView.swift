@@ -155,9 +155,9 @@ struct MeView: View {
             }
             .padding(.horizontal, 14)
             .padding(.top, 6)
-            // 底栏是半透明浮层，内容滚到底时最后几项会被它盖住；
-            // 24pt 不够，按「底栏高度 + Home 指示条」留足
-            .padding(.bottom, 90)
+            // 底栏是 safeAreaInset，系统已经让出空间，这里只需一点呼吸位。
+            // 之前加 90pt 是误判——反而把内容顶得过高。
+            .padding(.bottom, 24)
         }
         .background(palette.background)
         .overlay(alignment: .bottom) { toast }
