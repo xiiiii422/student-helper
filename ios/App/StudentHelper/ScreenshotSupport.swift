@@ -19,6 +19,8 @@ enum UITestScreen: String {
     case compositionEmpty
     case compositionDetail
     case essay
+    /// 搜题历史页
+    case search
     /// 空对话页（「可以这样问」那一屏）
     case chatEmpty
 }
@@ -38,6 +40,15 @@ enum ScreenshotMode {
     }
 
     static var isActive: Bool { screen != nil }
+
+    /// 截图时预填的搜索关键词（`-uiTestQuery 圆`），让搜索页能截出结果态而不是空态
+    static var query: String? {
+        let args = ProcessInfo.processInfo.arguments
+        guard let index = args.firstIndex(of: "-uiTestQuery"), index + 1 < args.count else {
+            return nil
+        }
+        return args[index + 1]
+    }
 
     /// 截图时强制主题。模拟器的 `simctl ui appearance dark` 在 CI 上不稳定
     /// （App 仍会拿到 light 的 colorScheme），所以直接从启动参数注入，保证深色可复现。
@@ -174,6 +185,12 @@ enum ScreenshotMode {
             ))
         case .essay:
             break
+        case .search:
+            // 搜索页要有可搜的内容：三科各埋一条，关键词「圆」能命中两条
+            store.insert(Message(subject: "math", role: "user", textContent: "一个圆的半径是 3cm，面积是多少？", createdAt: base))
+            store.insert(Message(subject: "math", role: "assistant", textContent: "【答案】答：28.26 平方厘米。", createdAt: base + 60_000))
+            store.insert(Message(subject: "chinese", role: "user", textContent: "《圆的一周》这篇课文讲了什么？", createdAt: base + 120_000))
+            store.insert(Message(subject: "english", role: "user", textContent: "circle 是什么意思？", createdAt: base + 180_000))
         }
     }
 }

@@ -10,8 +10,8 @@ struct SearchView: View {
     /// 不能从外部每次 body 重算时新建——那样每帧都在造对象。
     var openSubject: (String) -> Void = { _ in }
 
-    init(store: AppStore, openSubject: @escaping (String) -> Void = { _ in }) {
-        _vm = StateObject(wrappedValue: SearchViewModel(store: store))
+    init(store: AppStore, initialQuery: String = "", openSubject: @escaping (String) -> Void = { _ in }) {
+        _vm = StateObject(wrappedValue: SearchViewModel(store: store, initialQuery: initialQuery))
         self.openSubject = openSubject
     }
 
@@ -158,8 +158,12 @@ final class SearchViewModel: ObservableObject {
 
     private let store: AppStore
 
-    init(store: AppStore) {
+    init(store: AppStore, initialQuery: String = "") {
         self.store = store
+        // CI 截图要能截出「有结果」的搜索态，不然永远只有空态
+        if !initialQuery.isEmpty {
+            query = initialQuery
+        }
         reload()
     }
     private func reload() {
