@@ -162,12 +162,50 @@ public enum MarkdownLite {
             let afterBold = line
             line = replacing(code, afterBold) { "<code>" + group($0, 1, in: afterBold) + "</code>" }
             // 实体（&lt; &#39;）里的分号会被误当成标点，所以转义之后再包、且禁则集不含 ASCII 分号
+            //
+            // 关键：禁则包 <span class="nw"> 时不能把公式一起包进去。
+            // punctGlue 的匹配单元里含 `\(...\)`，一旦整个包进 span，
+            // KaTeX 的 auto-render 遍历文本节点时看到的就不再是连续的定界符，
+            // 公式永远渲染不出来（真机与模拟器都表现为显示原始 \(...\)）。
+            // 所以这里先按「公式 / 非公式」切片，只在非公式片段上做禁则处理。
             let beforeGlue = line
-            line = replacing(punctGlue, beforeGlue) { m in
-                "<span class=\"nw\">" + group(m, 0, in: beforeGlue) + "</span>"
-            }
+            line = gluePunctuationOutsideMath(beforeGlue)
             return emphasized ? "<b>\(line)</b>" : line
         }.joined(separator: "<br>")
+    }
+
+    /// 只对公式之外的片段做标点禁则，保证 `\(...\)` 原样留给 KaTeX。
+    private static func gluePunctuationOutsideMath(_ line: String) -> String {
+        guard line.contains("\\(") || line.contains("\\[") else {
+            return replacing(punctGlue, line) { m in
+                "<span class=\"nw\">" + group(m, 0, in: line) + "</span>"
+            }
+        }
+        // 按公式定界符切段：奇数段是公式，保持原样；偶数段做禁则
+        let pattern = try! NSRegularExpression(
+            pattern: #"(\\\((?:(?!\\\().)*?\\\)|\\\[(?:(?!\\\[).)*?\\\])"#,
+            options: [.dotMatchesLineSeparators]
+        )
+        var out = ""
+        var cursor = 0
+        let ns = line as NSString
+        for m in pattern.matches(in: line, range: NSRange(location: 0, length: ns.length)) {
+            let before = ns.substring(with: NSRange(location: cursor, length: m.range.location - cursor))
+            if !before.isEmpty {
+                out += replacing(punctGlue, before) { g in
+                    "<span class=\"nw\">" + group(g, 0, in: before) + "</span>"
+                }
+            }
+            out += ns.substring(with: m.range)   // 公式原样保留
+            cursor = NSMaxRange(m.range)
+        }
+        if cursor < ns.length {
+            let rest = ns.substring(with: NSRange(location: cursor, length: ns.length - cursor))
+            out += replacing(punctGlue, rest) { g in
+                "<span class=\"nw\">" + group(g, 0, in: rest) + "</span>"
+            }
+        }
+        return out
     }
 
     // MARK: - 输出结构
