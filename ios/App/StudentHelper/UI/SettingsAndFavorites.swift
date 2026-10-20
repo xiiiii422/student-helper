@@ -262,8 +262,181 @@ struct FavoritesView: View {
     @State private var expanded: Set<Int> = []
 
     var body: some View {
+        Group {
+            if vm.selfTest {
+                selfTestScreen
+            } else {
+                listScreen
+            }
+        }
+        .background(palette.background)
+        .navigationTitle("错题本")
+        .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: Binding<IdentifiableURL?>(
+            get: { vm.exportUrl.asIdentifiableURL },
+            set: { if $0 == nil { vm.exportUrl = nil } }
+        )) { item in
+            ShareSheet(items: [item.value])
+        }
+        .alert("提示", isPresented: Binding(
+            get: { vm.error != nil },
+            set: { if !$0 { vm.error = nil } }
+        )) {
+            Button("好", role: .cancel) { vm.error = nil }
+        } message: {
+            Text(vm.error ?? "")
+        }
+    }
+
+    // MARK: 自测模式
+
+    /// 整屏自测：只出题目，答案先挡住，学生心里答完再对照自评。
+    private var selfTestScreen: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("第 \(vm.sessionProgress.done + 1)/\(vm.sessionProgress.total) 题")
+                    .font(HyperType.labelLarge)
+                    .foregroundStyle(palette.textSecondary)
+                Spacer()
+                Button { vm.exitSelfTest() } label: {
+                    Text("退出自测").font(HyperType.bodyMedium).foregroundStyle(palette.accent)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            .padding(.bottom, 8)
+
+            if let row = vm.currentTest {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        HStack(spacing: 6) {
+                            Circle().fill(SubjectColor.forSubject(row.favorite.subject))
+                                .frame(width: 7, height: 7)
+                            Text(SubjectLabel.of(row.favorite.subject))
+                                .font(HyperType.footnote)
+                                .foregroundStyle(palette.textSecondary)
+                        }
+                        Text(row.question)
+                            .font(HyperType.title2)
+                            .foregroundStyle(palette.text)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        answerBlock(row)
+                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                selfTestActionBar
+            } else {
+                // 本轮过完
+                VStack(spacing: 12) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 44))
+                        .foregroundStyle(Hyper.english)
+                    Text("这一轮练完了")
+                        .font(HyperType.title2)
+                        .foregroundStyle(palette.text)
+                    let remaining = vm.remainingAfterRound
+                    Text(remaining == 0
+                        ? "所有错题都已掌握，休息一下。"
+                        : "还有 \(remaining) 题没掌握，可以再练一轮。")
+                        .font(HyperType.bodyMedium)
+                        .foregroundStyle(palette.textSecondary)
+                    HStack(spacing: 12) {
+                        if remaining > 0 {
+                            Button { vm.restartRound() } label: {
+                                Text("再来一轮")
+                                    .font(HyperType.titleMedium)
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 24).padding(.vertical, 11)
+                                    .background(Capsule().fill(Hyper.miBlue))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        Button { vm.exitSelfTest() } label: {
+                            Text("返回列表")
+                                .font(HyperType.titleMedium)
+                                .foregroundStyle(palette.text)
+                                .padding(.horizontal, 24).padding(.vertical, 11)
+                                .background(Capsule().stroke(palette.divider, lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(24)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func answerBlock(_ row: FavoriteRow) -> some View {
+        if vm.answerRevealed {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("参考答案").font(HyperType.labelLarge).foregroundStyle(palette.textSecondary)
+                MathText(content: row.answer, color: palette.text)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(HyperRadius.smallShape.fill(palette.fill))
+        } else {
+            Button { vm.answerRevealed = true } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "eye")
+                    Text("我答完了，看参考答案")
+                }
+                .font(HyperType.labelLarge)
+                .foregroundStyle(palette.accent)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(HyperRadius.smallShape.fill(palette.card))
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var selfTestActionBar: some View {
+        VStack(spacing: 8) {
+            if vm.answerRevealed {
+                HStack(spacing: 12) {
+                    Button { vm.mark(mastered: false) } label: {
+                        Label("再看看", systemImage: "arrow.counterclockwise")
+                            .font(HyperType.titleMedium)
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity).padding(.vertical, 12)
+                            .background(Capsule().fill(Hyper.miOrange))
+                    }
+                    .buttonStyle(.plain)
+                    Button { vm.mark(mastered: true) } label: {
+                        Label("已掌握", systemImage: "checkmark")
+                            .font(HyperType.titleMedium)
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity).padding(.vertical, 12)
+                            .background(Capsule().fill(Hyper.english))
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else {
+                Button { vm.skipCurrent() } label: {
+                    Text("这题跳过").font(HyperType.bodyMedium).foregroundStyle(palette.textTertiary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    // MARK: 列表模式
+
+    private var listScreen: some View {
         ScrollView {
             VStack(spacing: 10) {
+                if !vm.rows.isEmpty {
+                    masteryHeader
+                }
                 HStack(spacing: 8) {
                     chip("全部", selected: filter == nil) { filter = nil }
                     ForEach(["chinese", "math", "english"], id: \.self) { subject in
@@ -296,23 +469,40 @@ struct FavoritesView: View {
             }
             .padding(.bottom, 20)
         }
-        .background(palette.background)
-        .navigationTitle("错题本")
-        .navigationBarTitleDisplayMode(.inline)
-        .sheet(item: Binding<IdentifiableURL?>(
-            get: { vm.exportUrl.asIdentifiableURL },
-            set: { if $0 == nil { vm.exportUrl = nil } }
-        )) { item in
-            ShareSheet(items: [item.value])
+    }
+
+    /// 顶部掌握概览 + 进入自测入口：让「自测」这个功能一眼就能看到、点到。
+    private var masteryHeader: some View {
+        let c = vm.counts
+        return HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("掌握情况").font(HyperType.labelLarge).foregroundStyle(palette.textSecondary)
+                HStack(spacing: 8) {
+                    Text("已掌握 \(c.mastered)")
+                        .font(HyperType.bodyMedium).foregroundStyle(Hyper.english)
+                    Text("待复习 \(c.again)")
+                        .font(HyperType.bodyMedium).foregroundStyle(Hyper.miOrange)
+                    Text("未测 \(c.untested)")
+                        .font(HyperType.bodyMedium).foregroundStyle(palette.textTertiary)
+                }
+            }
+            Spacer()
+            Button { vm.beginSelfTest() } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "play.circle.fill")
+                    Text("自测").font(HyperType.labelLarge)
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 16).padding(.vertical, 9)
+                .background(Capsule().fill(Hyper.miBlue))
+            }
+            .buttonStyle(.plain)
         }
-        .alert("提示", isPresented: Binding(
-            get: { vm.error != nil },
-            set: { if !$0 { vm.error = nil } }
-        )) {
-            Button("好", role: .cancel) { vm.error = nil }
-        } message: {
-            Text(vm.error ?? "")
-        }
+        .padding(14)
+        .frame(maxWidth: .infinity)
+        .background(HyperRadius.cardShape.fill(palette.card))
+        .padding(.horizontal, 14)
+        .padding(.top, 8)
     }
 
     /// 空态说清「怎么进来」，否则学生只会站在这里问错题本有什么用。
@@ -397,7 +587,18 @@ struct FavoriteRow {
 @MainActor
 final class FavoritesViewModel: ObservableObject {
     @Published private(set) var rows: [FavoriteRow] = []
+    /// 自测模式开关
+    @Published private(set) var selfTest = false
+    /// 当前这题的答案是否已揭开
+    @Published var answerRevealed = false
     private let store: AppStore
+
+    /// 本轮自测锁定的题目 id（按「先未测、后待复习」排）。
+    /// 必须进来时锁一份：答一题就会改 reviewState，而队列是按 reviewState 算的，
+    /// 直接拿下标往前推进会跳题；全标「再看看」时甚至会卡在同一题死循环。
+    private var sessionQueue: [Int] = []
+    /// 本轮已经过手的 id（不管判会还是判不会，本轮都不再重复出同一题）
+    private var passed: Set<Int> = []
 
     init(store: AppStore) {
         self.store = store
@@ -421,7 +622,75 @@ final class FavoritesViewModel: ObservableObject {
 
     func remove(_ favorite: Favorite) {
         store.toggleFavorite(messageId: favorite.messageId)
+        passed.remove(favorite.id)
+        sessionQueue.removeAll { $0 == favorite.id }
         reload()
+    }
+
+    // MARK: 自测模式
+
+    var counts: (mastered: Int, again: Int, untested: Int) {
+        store.reviewCounts(subject: nil)
+    }
+
+    /// 待测队列：未测的在前（先做新题），再轮到判过「再看看」的；已掌握的毕业出队。
+    private var pendingQueue: [FavoriteRow] {
+        let open = rows.filter { $0.favorite.reviewState != "mastered" }
+        return open.filter { $0.favorite.reviewState == nil }
+            + open.filter { $0.favorite.reviewState == "again" }
+    }
+
+    var currentTest: FavoriteRow? {
+        guard selfTest else { return nil }
+        for id in sessionQueue where !passed.contains(id) {
+            if let row = rows.first(where: { $0.favorite.id == id }) { return row }
+        }
+        return nil
+    }
+
+    /// 本轮进度：总共几题、已经过手几题
+    var sessionProgress: (done: Int, total: Int) {
+        (sessionQueue.filter { passed.contains($0) }.count, sessionQueue.count)
+    }
+
+    /// 队列排空后还剩多少没掌握的（判过「再看看」的会被再来一轮捞回来）
+    var remainingAfterRound: Int {
+        pendingQueue.count
+    }
+
+    func beginSelfTest() {
+        sessionQueue = pendingQueue.map(\.favorite.id)
+        passed = []
+        answerRevealed = false
+        selfTest = true
+    }
+
+    func exitSelfTest() {
+        selfTest = false
+        answerRevealed = false
+    }
+
+    /// 再来一轮：只练本轮判过「再看看」的（它们 reviewState 仍是 again，仍在待测队列里）
+    func restartRound() {
+        sessionQueue = pendingQueue.map(\.favorite.id)
+        passed = []
+        answerRevealed = false
+    }
+
+    func mark(mastered: Bool) {
+        guard let row = currentTest else { return }
+        store.setReviewed(messageId: row.favorite.messageId, mastered: mastered)
+        passed.insert(row.favorite.id)
+        answerRevealed = false
+        reload()
+        Haptics.lightTap()
+    }
+
+    /// 直接放弃这一题（不改状态，下一轮还会遇到）
+    func skipCurrent() {
+        guard let row = currentTest else { return }
+        passed.insert(row.favorite.id)
+        answerRevealed = false
     }
 
     // MARK: 导出
