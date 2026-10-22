@@ -11,6 +11,51 @@ import SHCore
 /// 两个易错点也照搬安卓的处置：
 /// - KaTeX 字体是异步换的，首帧高度偏小 → 120ms / 420ms 各量一次
 /// - 同一份 HTML 只加载一次，否则列表回滚时整页重载会白屏闪一下
+/// 复用池：一个 WKWebView 要带起独立的 WebContent 进程与几 MB 常驻内存，
+/// 而聊天页每条含公式的答案都会建一个——长对话几十条就是几十个 WebView，
+/// 真机内存吃紧时会被系统直接杀掉（WKWebView 的 WebContent 崩溃表现为白屏/闪退）。
+///
+/// 这里用一个有上限的池复用：离开屏幕的实例归还，下次直接取用。
+/// 上限要留够同屏可见的气泡数，超了就新建（宁可多占一点，也不能两个气泡抢同一个 view）。
+private enum MathWebViewPool {
+    private static let limit = 6
+    private static var idle: [WKWebView] = []
+    private static let lock = NSLock()
+
+    static func acquire() -> WKWebView {
+        lock.lock()
+        defer { lock.unlock() }
+        if let web = idle.popLast() {
+            return web
+        }
+        return make()
+    }
+
+    static func release(_ web: WKWebView) {
+        lock.lock()
+        defer { lock.unlock() }
+        // 不在这里 stopLoading / 清 delegate：
+        // SwiftUI 有时会先 dismantle 再重建同一条气泡，此时页面可能还在加载，
+        // 强行停掉会让刚取用的那条白屏；delegate 由下一个使用者在 makeUIView 重新绑定。
+        guard idle.count < limit else { return }
+        idle.append(web)
+    }
+
+    private static func make() -> WKWebView {
+        let web = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
+        web.isOpaque = false
+        web.backgroundColor = .clear
+        web.scrollView.isScrollEnabled = false
+        web.scrollView.bounces = false
+        web.scrollView.showsVerticalScrollIndicator = false
+        web.allowsLinkPreview = false
+        #if DEBUG
+        if #available(iOS 16.4, *) { web.isInspectable = true }
+        #endif
+        return web
+    }
+}
+
 struct MathWebView: UIViewRepresentable {
     let content: String
     /// 正文颜色（跟随深浅色语义色）
@@ -23,22 +68,22 @@ struct MathWebView: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeUIView(context: Context) -> WKWebView {
-        let web = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
-        web.isOpaque = false
-        web.backgroundColor = .clear
-        web.scrollView.isScrollEnabled = false
-        web.scrollView.bounces = false
-        web.scrollView.showsVerticalScrollIndicator = false
-        web.allowsLinkPreview = false
-        #if DEBUG
-        if #available(iOS 16.4, *) { web.isInspectable = true }
-        #endif
+        let web = MathWebViewPool.acquire()
+        // 复用时 navigationDelegate 可能已被上个使用者清空，必须重新绑定，
+        // 否则高度回调不会打到当前这个 Coordinator 上（表现为气泡高度一直是 44）
         web.navigationDelegate = context.coordinator
         context.coordinator.onHeight = onHeight
         if ScreenshotMode.isActive {
             context.coordinator.onDiagnostics = onDiagnostics
         }
         return web
+    }
+
+    /// 销毁时归还池子而不是直接丢弃，让下一条公式能复用。
+    /// 不清 delegate：SwiftUI 可能只是短暂 dismantle 后立刻重建同一条气泡，
+    /// 此时停掉加载会导致白屏。下一个使用者会在 makeUIView 里重新绑定。
+    static func dismantleUIView(_ web: WKWebView, coordinator: Coordinator) {
+        MathWebViewPool.release(web)
     }
 
     func updateUIView(_ web: WKWebView, context: Context) {
@@ -81,8 +126,42 @@ struct MathWebView: UIViewRepresentable {
             do {
                 try html.write(to: page, atomically: true, encoding: .utf8)
                 web.loadFileURL(page, allowingReadAccessTo: workDir)
+                // 页面写成功并开始加载后才清理旧页面：
+                // WebView 现在会复用，每次 reload 都新建 HTML，长对话会堆出上百个文件，
+                // 而 Caches 不会自动回收（占的是用户的空间）。
+                // 必须在这之后清，且跳过刚写的这个文件，否则会删掉正在加载的页面。
+                Self.prunePages(in: workDir, keep: page)
             } catch {
                 web.loadHTMLString(html, baseURL: nil)
+            }
+        }
+
+        /// 清理历史页面文件，但保留最近若干个。
+        ///
+        /// 不能「只留刚写的这一个」：池里的多个 WebView 可能正同时显示不同气泡，
+        /// 各自加载各自的 page-xxx.html，全删会让其它气泡白屏。
+        /// 所以按修改时间排序，只回收最旧的那批，且保留量要大于池容量。
+        private static func prunePages(in dir: URL, keep: URL) {
+            let fm = FileManager.default
+            guard let items = try? fm.contentsOfDirectory(
+                at: dir, includingPropertiesForKeys: [.contentModificationDateKey]
+            ) else { return }
+
+            let pages = items.filter {
+                $0.lastPathComponent.hasPrefix("page-") && $0.lastPathComponent.hasSuffix(".html")
+            }
+            // 阈值要比池容量宽：给还在显示中的页面留足余量
+            guard pages.count > 12 else { return }
+
+            let sorted = pages.sorted { a, b in
+                let da = (try? a.resourceValues(forKeys: [.contentModificationDateKey]))?
+                    .contentModificationDate ?? Date.distantPast
+                let db = (try? b.resourceValues(forKeys: [.contentModificationDateKey]))?
+                    .contentModificationDate ?? Date.distantPast
+                return da < db
+            }
+            for old in sorted.dropLast(8) where old.lastPathComponent != keep.lastPathComponent {
+                try? fm.removeItem(at: old)
             }
         }
 
@@ -205,6 +284,13 @@ struct MathText: View {
                         diagnostics = text
                     }
                     .frame(width: .infinity, height: height > 0 ? height : 44, alignment: .topLeading)
+                    // 内容换了就先把高度归零：列表会复用同一位置的视图显示不同答案，
+                    // 残留的旧高度会让新答案被截断（或下面空一大块）
+                    .onChange(of: content) { _ in
+                        height = 0
+                        renderFailed = false
+                        diagnostics = nil
+                    }
                     // 截图模式把诊断结果显示出来：CI 里看不到 print，只能靠页面上的字判断
                     if ScreenshotMode.isActive, let diagnostics {
                         Text("[katex] \(diagnostics)")
