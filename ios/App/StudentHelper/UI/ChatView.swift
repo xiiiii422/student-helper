@@ -70,6 +70,9 @@ struct ChatView: View {
             OcrConfirmSheet(pending: pending) { text, mode, grade in
                 vm.confirmPendingSend(text: text, mode: mode, gradeMode: grade)
             } onCancel: {
+                // 取消发送时把这张图删掉：它已经落盘但没有消息会引用它，
+                // 留着就是纯占空间的孤儿文件
+                FileStorage.delete(path: pending.imageUri)
                 vm.pendingOcr = nil
             }
         }

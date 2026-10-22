@@ -332,6 +332,10 @@ final class ChatViewModel: ObservableObject {
     // MARK: - 图片提问
 
     /// 处理一张已保存到本地的图片：压缩 → OCR → 弹出确认，与安卓 processImageFile 同流程。
+    ///
+    /// 调用方已经把图 persist 进沙盒了，所以这里每一步失败都要**把图删掉**：
+    /// 否则这张图永远没有消息引用它，变成孤儿文件白白占空间
+    /// （孤儿清扫只在启动时跑一次，用户不会频繁重启，空间就是这样被吃掉的）。
     func processImage(at url: URL) {
         guard !ocrWorking else { return }
         ocrWorking = true
@@ -339,11 +343,13 @@ final class ChatViewModel: ObservableObject {
             guard let self else { return }
             defer { self.ocrWorking = false }
             guard let image = UIImage(contentsOfFile: url.path) else {
+                FileStorage.delete(path: url.path)
                 self.error = "图片读取失败，请重拍一张"
                 return
             }
             let compressed = ImageCodec.compress(image)
             guard let base64 = ImageCodec.base64(from: compressed) else {
+                FileStorage.delete(path: url.path)
                 self.error = "图片编码失败"
                 return
             }
