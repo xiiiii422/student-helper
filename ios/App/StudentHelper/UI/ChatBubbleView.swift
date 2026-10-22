@@ -122,15 +122,18 @@ struct ChatBubbleView: View {
                     .fill(palette.fill)
                     .frame(width: 210, height: 160)
                     .overlay(Image(systemName: "photo").foregroundStyle(palette.textTertiary))
-                    // 占位先出现，解码在后台完成——流式时整表每 300ms 重绘一次，
-                    // 同步解码会让滚动明显掉帧。
-                    .task(id: uri) {
-                        thumbnailImage = await LocalImage.loadAsync(uri)
-                    }
             }
         }
         .padding(.bottom, 4)
         .onTapGesture { onImageClick?() }
+        // 加载任务必须挂在外层：以前它挂在占位分支里，一旦图加载成功占位就被移除，
+        // 而列表复用这个视图显示另一张图时，新 uri 不会再触发加载——
+        // 表现为「气泡上留着上一张图」或一直空白。
+        .task(id: uri) {
+            // 换 uri 时先清掉旧图，避免短暂显示上一张
+            thumbnailImage = nil
+            thumbnailImage = await LocalImage.loadAsync(uri)
+        }
     }
 
     // MARK: 操作行
