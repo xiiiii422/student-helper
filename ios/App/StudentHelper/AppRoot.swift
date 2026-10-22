@@ -50,9 +50,13 @@ extension EnvironmentValues {
     }
 }
 
-final class AppDelegate: NSObject, UIApplicationDelegate {
+final class AppDelegate: NSObject, UIApplicationDelegate, ObservableObject {
     /// 冷启动时 SwiftUI 视图还没建好，先攒着，等根视图出现再消费。
-    var pendingAction: QuickAction?
+    ///
+    /// 必须 @Published 且遵循 ObservableObject：以前它是普通 class 的普通属性，
+    /// 改了不会通知 SwiftUI，`.onChange(of: appDelegate.pendingAction)` 永远不触发，
+    /// 结果桌面长按的三个快捷操作全是摆设。
+    @Published var pendingAction: QuickAction?
 
     func application(
         _ application: UIApplication,
@@ -204,13 +208,26 @@ final class AppContainer: ObservableObject {
     }
 
     /// 首页快捷操作由根视图消费：告诉它要跳到哪。
-    var pendingRoute: QuickAction?
-    var pendingRouteObserver = UUID()
+    ///
+    /// @Published + 计数器：同一个快捷操作可能被连按两次（比如已经停在错题本再点一次），
+    /// 只存 action 的话值没变、onChange 不触发，界面不动。计数器保证每次都是一次新的触发。
+    @Published var pendingRoute: QuickAction?
+    @Published var pendingRouteNonce = 0
+
+    /// 桌面快捷操作「拍照问一题」：告诉某一科的聊天页去弹相机。
+    /// 用 nonce 而非 Bool，是为了连点两次时第二次也能触发（Bool 值没变就不触发）。
+    @Published var photoRequestSubject: String?
+    @Published var photoRequestNonce = 0
+
+    func requestPhoto(for subject: String) {
+        photoRequestSubject = subject
+        photoRequestNonce += 1
+    }
 
     func handle(_ action: QuickAction?) {
         guard let action else { return }
         pendingRoute = action
-        pendingRouteObserver = UUID()
+        pendingRouteNonce += 1
     }
 
     func handle(url: URL) {
@@ -241,6 +258,12 @@ struct RootView: View {
                 AppBottomBar(selection: $selection)
             }
             .task { applyLanding(router) }
+            // 桌面长按快捷操作：AppDelegate 攒下意图后由这里消费。
+            // 监听 nonce 而不是 action——同一个操作连按两次时 action 值不变，
+            // 只监听 action 会导致第二次点了没反应。
+            .onChange(of: container.pendingRouteNonce) { _ in
+                applyQuickAction(container.pendingRoute, router: router)
+            }
         } destination: { route in
             AnyView(subPage(route))
         }
@@ -250,6 +273,27 @@ struct RootView: View {
     private func applyLanding(_ router: Router) {
         if let tab = container.initialTab { selection = tab }
         if let route = container.initialRoute { router.push(route) }
+    }
+
+    /// 消费桌面长按的快捷操作。以前这些方法只是改了没人读的变量，点了完全没反应。
+    private func applyQuickAction(_ action: QuickAction?, router: Router) {
+        guard let action else { return }
+        switch action {
+        case .askByPhoto:
+            selection = .math
+            // 回到根再通知该科弹出拍照：直接改 selection 时 VM 已经常驻，
+            // 用容器把意图转给对应学科的 VM
+            router.popToRoot()
+            container.requestPhoto(for: "math")
+        case .essay:
+            selection = .chinese
+            router.popToRoot()
+            router.push(.essay)
+        case .favorites:
+            selection = .me
+            router.popToRoot()
+            router.push(.favorites)
+        }
     }
 
     @ViewBuilder

@@ -19,6 +19,8 @@ struct ChatView: View {
 
     @Environment(\.hyperPalette) private var palette
     @EnvironmentObject private var router: Router
+    /// 桌面快捷操作「拍照问一题」经由容器转到本页
+    @EnvironmentObject private var container: AppContainer
     /// 订阅朗读状态：以前气泡永远传 spokenChunk=nil，既没有「正在念」高亮，
     /// 菜单也永远显示「朗读这条」而不是「停止」，用户根本停不下来。
     @EnvironmentObject private var speech: SpeechService
@@ -58,6 +60,12 @@ struct ChatView: View {
         .background(palette.background)
         .sheet(isPresented: $showCamera) { cameraSheet }
         .sheet(isPresented: $showLibrary) { librarySheet }
+        // 桌面长按「拍照问一题」：容器把意图转过来后，对应学科的这一页弹相机
+        .onChange(of: container.photoRequestNonce) { _ in
+            guard container.photoRequestSubject == vm.subject,
+                  UIImagePickerController.isSourceTypeAvailable(.camera) else { return }
+            showCamera = true
+        }
         .sheet(item: $vm.pendingOcr) { pending in
             OcrConfirmSheet(pending: pending) { text, mode, grade in
                 vm.confirmPendingSend(text: text, mode: mode, gradeMode: grade)
