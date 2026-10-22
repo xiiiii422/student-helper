@@ -75,7 +75,10 @@ final class ChatViewModel: ObservableObject {
             imageUri: lastUser.imageUri,
             imageBase64: imageBase64,
             ocrConfidence: lastUser.ocrConfidence,
-            skipUserInsert: true
+            skipUserInsert: true,
+            // 还原「批改我的作答」：以前重试会丢掉这个开关，
+            // 学生点了批改、失败后重试，悄悄变成了普通讲题
+            gradeMode: lastUser.gradeMode ?? false
         )
     }
 
@@ -100,7 +103,8 @@ final class ChatViewModel: ObservableObject {
             store.insert(
                 Message(
                     subject: subject, role: "user", textContent: userText,
-                    imageUri: imageUri, ocrConfidence: ocrConfidence
+                    imageUri: imageUri, ocrConfidence: ocrConfidence,
+                    gradeMode: gradeMode ? true : nil
                 )
             )
         }
@@ -234,7 +238,11 @@ final class ChatViewModel: ObservableObject {
             do {
                 let stream = await self.llm.chatStream(
                     subject: self.subject, userText: question.textContent,
-                    history: Array(history), imagesBase64: images, signals: signals
+                    history: Array(history), imagesBase64: images,
+                    // 还原批改意图：以前重新生成一律走普通讲题，
+                    // 学生让老师重批一次，结果拿到的是讲解而不是批改
+                    gradeMode: question.gradeMode ?? false,
+                    signals: signals
                 )
                 for try await delta in stream {
                     accumulated += delta

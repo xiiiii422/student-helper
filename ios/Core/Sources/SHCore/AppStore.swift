@@ -22,6 +22,10 @@ public struct Message: Codable, Equatable, Identifiable {
     public var imageUri: String?
     public var ocrConfidence: Double?
     public var isStreaming: Bool
+    /// 这次提问是不是「批改我的作答」。
+    /// 可选：旧库和安卓导来的备份都没有这个键，非可选会让整库解码失败。
+    /// 必须持久化：重试/重新生成要靠它还原用户的批改意图，否则会悄悄退回普通讲题。
+    public var gradeMode: Bool?
     /// 毫秒时间戳，与安卓 System.currentTimeMillis() 同口径
     public var createdAt: Int
 
@@ -33,6 +37,7 @@ public struct Message: Codable, Equatable, Identifiable {
         imageUri: String? = nil,
         ocrConfidence: Double? = nil,
         isStreaming: Bool = false,
+        gradeMode: Bool? = nil,
         createdAt: Int = Int(Date().timeIntervalSince1970 * 1000)
     ) {
         self.id = id
@@ -42,6 +47,7 @@ public struct Message: Codable, Equatable, Identifiable {
         self.imageUri = imageUri
         self.ocrConfidence = ocrConfidence
         self.isStreaming = isStreaming
+        self.gradeMode = gradeMode
         self.createdAt = createdAt
     }
 
@@ -49,7 +55,22 @@ public struct Message: Codable, Equatable, Identifiable {
         case id, subject, role, textContent, imageUri
         case ocrConfidence
         case isStreaming
+        case gradeMode = "grade_mode"
         case createdAt = "created_at"
+    }
+
+    /// 缺 grade_mode 的旧数据当「未开启」，不报错。
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Int.self, forKey: .id)
+        subject = try c.decode(String.self, forKey: .subject)
+        role = try c.decode(String.self, forKey: .role)
+        textContent = try c.decode(String.self, forKey: .textContent)
+        imageUri = try c.decodeIfPresent(String.self, forKey: .imageUri)
+        ocrConfidence = try c.decodeIfPresent(Double.self, forKey: .ocrConfidence)
+        isStreaming = try c.decodeIfPresent(Bool.self, forKey: .isStreaming) ?? false
+        gradeMode = try c.decodeIfPresent(Bool.self, forKey: .gradeMode)
+        createdAt = try c.decode(Int.self, forKey: .createdAt)
     }
 }
 
