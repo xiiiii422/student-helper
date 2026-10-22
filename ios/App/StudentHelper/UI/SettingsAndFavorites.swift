@@ -452,14 +452,22 @@ struct FavoritesView: View {
                     }
                     Spacer()
                     if !vm.rows(filter: filter).isEmpty {
-                        Button {
-                            vm.exportText(filter: filter)
+                        Menu {
+                            Button {
+                                vm.exportPdf(filter: filter)
+                            } label: {
+                                Label("导出 PDF（适合打印）", systemImage: "doc.richtext")
+                            }
+                            Button {
+                                vm.exportText(filter: filter)
+                            } label: {
+                                Label("导出文本（适合复制）", systemImage: "doc.text")
+                            }
                         } label: {
                             Image(systemName: "square.and.arrow.up")
                                 .font(.system(size: 15))
                                 .foregroundStyle(Hyper.miBlue)
                         }
-                        .buttonStyle(.plain)
                         .accessibilityLabel("导出错题")
                     }
                 }
@@ -710,19 +718,8 @@ final class FavoritesViewModel: ObservableObject {
 
     /// 把当前筛选下的错题导出成 txt，走系统分享面板（可存「文件」、发微信、打印）
     func exportText(filter: String?) {
-        let rows = rows(filter: filter)
-        guard !rows.isEmpty else {
-            error = "当前没有可导出的错题"
-            return
-        }
-        let items = rows.map {
-            FavoritesExport.Item(
-                subject: $0.favorite.subject,
-                question: $0.question,
-                answer: $0.answer,
-                createdAt: $0.favorite.createdAt
-            )
-        }
+        let items = exportItems(filter: filter)
+        guard let items else { return }
         let text = FavoritesExport.render(items: items)
         let name = "错题本-\(Timestamp.format(Int(Date().timeIntervalSince1970 * 1000)).replacingOccurrences(of: " ", with: "_").replacingOccurrences(of: ":", with: "")).txt"
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
@@ -732,6 +729,35 @@ final class FavoritesViewModel: ObservableObject {
             Haptics.success()
         } catch {
             self.error = "导出失败：\(error.localizedDescription)"
+        }
+    }
+
+    /// 导出成 PDF：家长打印出来给孩子做，排版（分页/字号/行距）是固定的，
+    /// 而 txt 在打印店会乱。绘制在主线程做即可（几十题，毫秒级）。
+    func exportPdf(filter: String?) {
+        let items = exportItems(filter: filter)
+        guard let items else { return }
+        do {
+            exportUrl = try PdfExport.render(items: items)
+            Haptics.success()
+        } catch {
+            self.error = "导出失败：\(error.localizedDescription)"
+        }
+    }
+
+    private func exportItems(filter: String?) -> [FavoritesExport.Item]? {
+        let rows = rows(filter: filter)
+        guard !rows.isEmpty else {
+            error = "当前没有可导出的错题"
+            return nil
+        }
+        return rows.map {
+            FavoritesExport.Item(
+                subject: $0.favorite.subject,
+                question: $0.question,
+                answer: $0.answer,
+                createdAt: $0.favorite.createdAt
+            )
         }
     }
 }
