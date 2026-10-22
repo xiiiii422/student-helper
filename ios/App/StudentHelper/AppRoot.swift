@@ -435,14 +435,26 @@ enum BackupService {
     }
 
     static func importArchive(from url: URL, store: AppStore) async throws {
-        // 「文件」App 给的是安全作用域资源，必须先 startAccessing 才读得到
+        // 「文件」App 给的是安全作用域资源，必须先 startAccessing 才读得到。
+        //
+        // 关键：**不能把 URL 直接丢进后台任务里读**。
+        // 以前 Data(contentsOf: url) 在 Task.detached 里跑，而 stopAccessing 的 defer
+        // 在主线程——异步任务还没读到文件，授权可能就已经被撤销了，
+        // 真机上表现为「导入偶尔失败」，时好时坏最难查。
+        // 所以这里趁作用域还有效，先把整个文件读进内存，再交给后台解包。
         var scoped = false
         if url.isFileURL { scoped = url.startAccessingSecurityScopedResource() }
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        let fileData: Data?
+        if scoped {
+            fileData = try? Data(contentsOf: url)
+            url.stopAccessingSecurityScopedResource()
+        } else {
+            fileData = try? Data(contentsOf: url)
+        }
 
         let imagesDir = FileStorage.imagesDirectory
         let (snapshot, imageFiles) = try await Task.detached(priority: .userInitiated) {
-            guard let data = try? Data(contentsOf: url) else { throw BackupError.archiveUnreadable }
+            guard let data = fileData else { throw BackupError.archiveUnreadable }
             let entries = try Zip.read(data)
             guard let jsonEntry = entries.first(where: { $0.name == "data.json" }) else {
                 throw BackupError.archiveUnreadable
