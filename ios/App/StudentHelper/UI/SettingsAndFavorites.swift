@@ -294,9 +294,17 @@ struct FavoritesView: View {
     private var selfTestScreen: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("第 \(vm.sessionProgress.done + 1)/\(vm.sessionProgress.total) 题")
-                    .font(HyperType.labelLarge)
-                    .foregroundStyle(palette.textSecondary)
+                // 本轮过完时不能再算 done+1：会出现「第 3/2 题」，
+                // 全部已掌握时更是「第 1/0 题」
+                if vm.currentTest != nil {
+                    Text("第 \(vm.sessionProgress.done + 1)/\(vm.sessionProgress.total) 题")
+                        .font(HyperType.labelLarge)
+                        .foregroundStyle(palette.textSecondary)
+                } else {
+                    Text("自测")
+                        .font(HyperType.labelLarge)
+                        .foregroundStyle(palette.textSecondary)
+                }
                 Spacer()
                 Button { vm.exitSelfTest() } label: {
                     Text("退出自测").font(HyperType.bodyMedium).foregroundStyle(palette.accent)
