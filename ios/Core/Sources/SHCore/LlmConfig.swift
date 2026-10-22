@@ -46,9 +46,22 @@ public struct LlmConfig: Equatable {
         self.disableThinking = disableThinking
     }
 
+    /// 按有没有图选模型通道。
+    ///
+    /// 视觉模型为空时回退到对话模型：自定义服务只填了 chat 模型、没填视觉模型是常见情况，
+    /// 以前会拿空模型名去发请求，供应商返回 400，而这个状态码不在重试列表里——
+    /// 学生看到的就是「拍照问了没反应」，完全不知道是自己少填了一个字段。
+    /// 回退到对话模型至少能给出回答（多数服务现在 chat 模型也支持图片），
+    /// 比直接失败有用得多。
     public func channel(hasImage: Bool) -> Channel {
-        hasImage ? Channel(model: vlModel, maxTokens: vlMaxTokens)
-                 : Channel(model: chatModel, maxTokens: chatMaxTokens)
+        guard hasImage else {
+            return Channel(model: chatModel, maxTokens: chatMaxTokens)
+        }
+        let useVL = !vlModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return Channel(
+            model: useVL ? vlModel : chatModel,
+            maxTokens: useVL ? vlMaxTokens : chatMaxTokens
+        )
     }
 
     public var endpoint: String { baseUrl + "/chat/completions" }
