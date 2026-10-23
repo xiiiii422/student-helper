@@ -50,3 +50,7 @@ ocr_poc/
 tools/swift-dl/
 tools/*.log
 tools/_*
+
+# 本地 CI 截图/产物下载目录（不入库）
+ci-artifacts/
+ci-artifacts-ipa/
