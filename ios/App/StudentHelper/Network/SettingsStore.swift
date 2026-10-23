@@ -60,6 +60,10 @@ final class SettingsStore: SettingsProviding, @unchecked Sendable {
         static let chatModel = "chat_model"
         static let vlModel = "vl_model"
         static let themeMode = "theme_mode"
+        static let reminderOn = "reminder_on"
+        static let reminderHour = "reminder_hour"
+        static let reminderMinute = "reminder_minute"
+        static let reminderDay = "reminder_day"
     }
 
     private let defaults: UserDefaults
@@ -141,6 +145,37 @@ final class SettingsStore: SettingsProviding, @unchecked Sendable {
     var themeMode: Int {
         get { defaults.object(forKey: Key.themeMode) as? Int ?? 0 }
         set { defaults.set(newValue, forKey: Key.themeMode) }
+    }
+
+    // MARK: 学习提醒
+
+    /// 是否开启每日学习提醒。默认关：提醒涉及系统通知授权，
+    /// 不能一上来就弹授权把家长吓一跳，得让用户主动开。
+    var reminderOn: Bool {
+        get { defaults.bool(forKey: Key.reminderOn) }
+        set { defaults.set(newValue, forKey: Key.reminderOn) }
+    }
+
+    /// 提醒时间（24 小时制）。默认 19:30——放学写完作业后复习的窗口。
+    var reminderHour: Int {
+        get { defaults.object(forKey: Key.reminderHour) as? Int ?? 19 }
+        set { defaults.set(newValue, forKey: Key.reminderHour) }
+    }
+
+    var reminderMinute: Int {
+        get { defaults.object(forKey: Key.reminderMinute) as? Int ?? 30 }
+        set { defaults.set(newValue, forKey: Key.reminderMinute) }
+    }
+
+    /// 提醒时间的 DateComponents，给 UNCalendarNotificationTrigger 用。
+    var reminderComponents: DateComponents {
+        DateComponents(hour: reminderHour, minute: reminderMinute)
+    }
+
+    /// 提醒已开启的第几天（从 1 开始），用于文案轮换。关闭时归零。
+    var reminderDay: Int {
+        get { defaults.object(forKey: Key.reminderDay) as? Int ?? 1 }
+        set { defaults.set(max(1, newValue), forKey: Key.reminderDay) }
     }
 
     // MARK: SettingsProviding

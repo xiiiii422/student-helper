@@ -22,6 +22,26 @@ final class MeViewModel: ObservableObject {
     private let store: AppStore
     private let settings: SettingsStore
 
+    /// 设置页用到的底层设置（提醒字段直接代理到它）
+    var settingsStore: SettingsStore { settings }
+
+    var reminderOn: Bool {
+        get { settings.reminderOn }
+        set { settings.reminderOn = newValue }
+    }
+    var reminderHour: Int {
+        get { settings.reminderHour }
+        set { settings.reminderHour = newValue }
+    }
+    var reminderMinute: Int {
+        get { settings.reminderMinute }
+        set { settings.reminderMinute = newValue }
+    }
+    var reminderDay: Int {
+        get { settings.reminderDay }
+        set { settings.reminderDay = newValue }
+    }
+
     init(llm: LlmService, store: AppStore, settings: SettingsStore) {
         self.llm = llm
         self.store = store
@@ -151,6 +171,7 @@ struct MeView: View {
                 appCard
                 statsCard
                 themeSection
+                reminderSection
                 listCard
             }
             .padding(.horizontal, 14)
@@ -301,6 +322,138 @@ struct MeView: View {
             }
             .padding(14)
             .background(HyperRadius.cardShape.fill(palette.card))
+        }
+    }
+
+    /// 学习提醒：每天定时弹一条本地通知，落到「我的」页。
+    /// 默认关——涉及系统通知授权，不能一上来就弹把家长吓一跳。
+    @State private var showTimePicker = false
+    @State private var reminderAuthorized = false
+
+    private var reminderSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("学习提醒")
+                .font(HyperType.labelLarge)
+                .foregroundStyle(palette.textSecondary)
+                .padding(.leading, 6)
+
+            VStack(spacing: 0) {
+                Toggle(isOn: reminderBinding) {
+                    Label {
+                        Text("每日学习提醒")
+                            .font(HyperType.titleMedium)
+                            .foregroundStyle(palette.text)
+                    } icon: {
+                        Image(systemName: "bell.badge.fill")
+                            .foregroundStyle(Hyper.miOrange)
+                    }
+                }
+                .tint(palette.accent)
+
+                if vm.reminderOn {
+                    divider
+                    Button {
+                        showTimePicker = true
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "clock.fill")
+                                .foregroundStyle(Hyper.miBlue)
+                            Text("提醒时间")
+                                .font(HyperType.titleMedium)
+                                .foregroundStyle(palette.text)
+                            Spacer()
+                            Text(String(format: "%02d:%02d", vm.reminderHour, vm.reminderMinute))
+                                .font(HyperType.titleMedium)
+                                .foregroundStyle(palette.textSecondary)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 13))
+                                .foregroundStyle(palette.textSecondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .sheet(isPresented: $showTimePicker) {
+                        NavigationStack {
+                            DatePicker(
+                                "提醒时间",
+                                selection: reminderTimeBinding,
+                                displayedComponents: .hourAndMinute
+                            )
+                            .datePickerStyle(.wheel)
+                            .labelsHidden()
+                            .navigationTitle("提醒时间")
+                            .navigationBarTitleDisplayMode(.inline)
+                            .toolbar {
+                                ToolbarItem(placement: .confirmationAction) {
+                                    Button("完成") { showTimePicker = false }
+                                }
+                            }
+                        }
+                        .presentationDetents([.medium])
+                    }
+                }
+            }
+            .padding(14)
+            .background(HyperRadius.cardShape.fill(palette.card))
+
+            if vm.reminderOn, !reminderAuthorized {
+                Text("若收不到提醒，请到系统「设置 → 通知 → 学习小助手」开启通知权限。")
+                    .font(HyperType.bodySmall)
+                    .foregroundStyle(palette.textSecondary)
+                    .padding(.leading, 6)
+            }
+        }
+        .task { refreshAuthStatus() }
+    }
+
+    private var reminderBinding: Binding<Bool> {
+        Binding(
+            get: { vm.reminderOn },
+            set: { newValue in
+                if newValue {
+                    // 开提醒要先拿授权：被拒就别硬开，回到关，并提示去系统设置
+                    StudyReminderScheduler.requestAuthorization { granted in
+                        Task { @MainActor in
+                            if granted {
+                                vm.reminderOn = true
+                                vm.reminderDay = 1
+                                reminderAuthorized = true
+                                StudyReminderScheduler.reschedule(vm.settingsStore)
+                            } else {
+                                vm.reminderOn = false
+                                reminderAuthorized = false
+                            }
+                        }
+                    }
+                } else {
+                    vm.reminderOn = false
+                    StudyReminderScheduler.reschedule(vm.settingsStore)
+                }
+            }
+        )
+    }
+
+    private var reminderTimeBinding: Binding<Date> {
+        Binding(
+            get: {
+                var c = DateComponents()
+                c.hour = vm.reminderHour
+                c.minute = vm.reminderMinute
+                return Calendar.current.date(from: c) ?? Date()
+            },
+            set: { date in
+                let c = Calendar.current.dateComponents([.hour, .minute], from: date)
+                vm.reminderHour = c.hour ?? 19
+                vm.reminderMinute = c.minute ?? 30
+                StudyReminderScheduler.reschedule(vm.settingsStore)
+            }
+        )
+    }
+
+    private func refreshAuthStatus() {
+        StudyReminderScheduler.authorizationStatus { status in
+            Task { @MainActor in
+                reminderAuthorized = (status == .authorized || status == .provisional)
+            }
         }
     }
 

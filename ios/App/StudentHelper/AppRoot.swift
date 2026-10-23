@@ -16,6 +16,7 @@ struct StudentHelperApp: App {
             RootView()
                 .environmentObject(container)
                 .environmentObject(container.speech)
+                .environmentObject(appDelegate)
                 .environment(\.hyperPalette, container.themeMode.resolvePalette(
                     systemDark: systemScheme == .dark
                 ))
@@ -50,13 +51,18 @@ extension EnvironmentValues {
     }
 }
 
-final class AppDelegate: NSObject, UIApplicationDelegate, ObservableObject {
+final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate, ObservableObject {
     /// 冷启动时 SwiftUI 视图还没建好，先攒着，等根视图出现再消费。
     ///
     /// 必须 @Published 且遵循 ObservableObject：以前它是普通 class 的普通属性，
     /// 改了不会通知 SwiftUI，`.onChange(of: appDelegate.pendingAction)` 永远不触发，
     /// 结果桌面长按的三个快捷操作全是摆设。
     @Published var pendingAction: QuickAction?
+
+    /// 学习提醒从通知栏点进来：由本 delegate 转成通知，根容器监听后跳「我的」页。
+    /// 必须在 didFinishLaunching 里设为 delegate 且设置时必须已经 assigned——
+    /// 否则冷启动被点开的通知收不到。
+    var pendingReminderOpen = false
 
     func application(
         _ application: UIApplication,
@@ -82,7 +88,48 @@ final class AppDelegate: NSObject, UIApplicationDelegate, ObservableObject {
                 icon: UIApplicationShortcutIcon(systemImageName: "star")
             ),
         ]
+
+        UNUserNotificationCenter.current().delegate = self
+
+        // 已开启的提醒要在启动重排一次：iOS 自签 7 天过期、或用户清过通知后，
+        // 系统会清掉所有 pending 通知，不重排就再也不响了。
+        // 同时把「坚持天数」+1，文案每天轮换一条，给家长连续坚持的正反馈。
+        let settings = SettingsStore()
+        if settings.reminderOn {
+            settings.reminderDay += 1
+            // reschedule 标注 @MainActor（UNUserNotificationCenter 有主线程断言），
+            // 这里 didFinishLaunching 跑在主线程，但编译器不知道，显式跑在主 actor 上。
+            MainActor.assumeIsolated {
+                StudyReminderScheduler.reschedule(settings)
+            }
+        }
+
+        // 如果是被一条学习提醒点开冷启动的，标记一下，根视图建好去「我的」页
+        if let notice = launchOptions?[.remoteNotification] as? [String: Any],
+           notice["route"] as? String == "me" {
+            pendingReminderOpen = true
+        }
+
         return true
+    }
+
+    // 前台收到通知也展示（默认前台不弹，体验上家长开着 App 时也该看到提醒）
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound, .badge])
+    }
+
+    // 用户点通知：转交给调度器，由它发 NotificationCenter 事件
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        StudyReminderScheduler.handleLaunch(from: response)
+        completionHandler()
     }
 
     func application(
@@ -245,6 +292,7 @@ final class AppContainer: ObservableObject {
 
 struct RootView: View {
     @EnvironmentObject private var container: AppContainer
+    @EnvironmentObject private var appDelegate: AppDelegate
     @Environment(\.hyperPalette) private var palette
     @State private var selection: BottomTab = .chinese
 
@@ -263,6 +311,20 @@ struct RootView: View {
             // 只监听 action 会导致第二次点了没反应。
             .onChange(of: container.pendingRouteNonce) { _ in
                 applyQuickAction(container.pendingRoute, router: router)
+            }
+            // 学习提醒从通知栏点进来：AppDelegate 的 delegate 把意图转成通知事件，
+            // 这里收到后落到「我的」页（提醒文案也建议去复习/看错题本，去我的页最顺）。
+            // 「我的」是底部 tab，不是导航栈里的 Route，所以只切 tab + 清空栈即可。
+            .onReceive(NotificationCenter.default.publisher(for: .studyReminderTapped)) { _ in
+                selection = .me
+                router.popToRoot()
+            }
+            // 冷启动就是被提醒点开的：AppDelegate 标记后这里直接去「我的」页
+            .task {
+                if appDelegate.pendingReminderOpen {
+                    selection = .me
+                    router.popToRoot()
+                }
             }
         } destination: { route in
             AnyView(subPage(route))

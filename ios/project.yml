@@ -55,6 +55,8 @@ targets:
         type: folder
     dependencies:
       - package: SHCore
+      # 学习提醒用本地通知：必须显式链接系统框架，否则 UNUserNotificationCenter 链接失败
+      - sdk: UserNotifications.framework
     info:
       path: App/Generated/Info.plist
       properties:

@@ -176,6 +176,11 @@ enum ScreenshotMode {
             store.insert(Message(subject: "chinese", role: "assistant", textContent: "【答案】\n把春风写成了能看见的东西。", createdAt: daysAgo(2, hour: 20) + 60_000))
             store.insert(Message(subject: "english", role: "user", textContent: "He ___ (go) to school every day.", createdAt: daysAgo(4, hour: 19)))
             store.insert(Message(subject: "english", role: "assistant", textContent: "【答案】\ngoes", createdAt: daysAgo(4, hour: 19) + 60_000))
+            // 让「我的」页截出提醒区块的「开启态」（含时间行），方便视觉核对排版。
+            // 直接写 settings，不走 UI 授权流程，避免在 CI 模拟器上弹授权框卡住。
+            SettingsStore().reminderOn = true
+            SettingsStore().reminderHour = 19
+            SettingsStore().reminderMinute = 30
         case .favorites, .selfTest:
             let q = store.insert(Message(subject: "math", role: "user", textContent: "一件衣服打八折后是 120 元，原价多少钱？", createdAt: base))
             let a = store.insert(Message(
