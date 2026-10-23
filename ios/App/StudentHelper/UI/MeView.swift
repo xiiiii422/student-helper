@@ -285,6 +285,45 @@ struct MeView: View {
                     .font(HyperType.footnote)
                     .foregroundStyle(palette.textTertiary)
             }
+
+            // 各学科提问分布：用已经算好的 bySubject，按数量从多到少排，
+            // 每个学科一条带身份色的小药丸 + 计数，让家长一眼看出偏科还是均衡。
+            if !stats.bySubject.isEmpty {
+                Divider().foregroundStyle(palette.divider).padding(.top, 4)
+                let sorted = stats.bySubject.sorted { $0.value > $1.value }
+                let maxCount = max(sorted.map(\.value).max() ?? 1, 1)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("各学科提问分布")
+                        .font(HyperType.footnote)
+                        .foregroundStyle(palette.textSecondary)
+                    ForEach(sorted, id: \.key) { subject, count in
+                        HStack(spacing: 8) {
+                            Text(SubjectLabel.of(subject))
+                                .font(HyperType.bodyMedium)
+                                .foregroundStyle(palette.text)
+                                .frame(width: 36, alignment: .leading)
+                            GeometryReader { geo in
+                                let full = geo.size.width
+                                // 至少给 6pt，避免 0 计数看不见；按最大值归一宽度
+                                let width = count > 0
+                                    ? max(6, full * CGFloat(count) / CGFloat(maxCount))
+                                    : 6
+                                ZStack(alignment: .leading) {
+                                    HyperRadius.smallShape.fill(palette.fill)
+                                    HyperRadius.smallShape
+                                        .fill(Hyper.subjectColor(subject))
+                                        .frame(width: width)
+                                }
+                            }
+                            .frame(height: 14)
+                            Text("\(count)")
+                                .font(HyperType.footnote)
+                                .foregroundStyle(palette.textTertiary)
+                                .frame(minWidth: 22, alignment: .trailing)
+                        }
+                    }
+                }
+            }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)

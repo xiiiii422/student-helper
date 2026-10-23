@@ -46,6 +46,17 @@ enum Hyper {
     /// “我的”不是学科，不参与红/蓝/绿/橙那套身份色；再用紫会退化成系统默认强调色的观感。
     static let me = textSecondary
 
+    /// 学科身份色：和「问得最多」标签、错题本分类色保持一致，家长一眼归类。
+    static func subjectColor(_ subject: String) -> Color {
+        switch subject {
+        case "chinese": return Hyper.chinese
+        case "math": return Hyper.math
+        case "english": return Hyper.english
+        case "composition": return Hyper.composition
+        default: return Hyper.textSecondary
+        }
+    }
+
     // ── 分数配色 ──
     static let scoreExcellent = Color(hex: 0x00B42A)    // >=90 绿
     static let scoreGood = miBlue                       // >=80 蓝
