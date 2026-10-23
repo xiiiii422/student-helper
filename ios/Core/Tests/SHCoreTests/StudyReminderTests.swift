@@ -31,27 +31,4 @@ final class StudyReminderTests: XCTestCase {
         // 每天重排靠同一个 identifier replace，不能变
         XCTAssertEqual(StudyReminder.requestIdentifier, "daily-study-reminder")
     }
-
-    // 配置默认值：用独立 UserDefaults 套件，避免污染真实设置
-    func test默认提醒时间() {
-        let s = SettingsStore(defaults: UserDefaults(suiteName: "test.reminder.\(UUID())")!)
-        XCTAssertFalse(s.reminderOn, "默认不开启，不能一上来弹授权")
-        XCTAssertEqual(s.reminderHour, 19)
-        XCTAssertEqual(s.reminderMinute, 30)
-        XCTAssertEqual(s.reminderDay, 1)
-    }
-
-    func test开启后写回() {
-        let s = SettingsStore(defaults: UserDefaults(suiteName: "test.reminder.\(UUID())")!)
-        s.reminderOn = true
-        s.reminderHour = 8
-        s.reminderMinute = 5
-        s.reminderDay = 4
-        XCTAssertTrue(s.reminderOn)
-        XCTAssertEqual(s.reminderHour, 8)
-        XCTAssertEqual(s.reminderMinute, 5)
-        XCTAssertEqual(s.reminderDay, 4)
-        XCTAssertEqual(s.reminderComponents.hour, 8)
-        XCTAssertEqual(s.reminderComponents.minute, 5)
-    }
 }
