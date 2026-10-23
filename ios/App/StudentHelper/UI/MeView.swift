@@ -393,7 +393,7 @@ struct MeView: View {
 
             if vm.reminderOn, !reminderAuthorized {
                 Text("若收不到提醒，请到系统「设置 → 通知 → 学习小助手」开启通知权限。")
-                    .font(HyperType.bodySmall)
+                    .font(HyperType.footnote)
                     .foregroundStyle(palette.textSecondary)
                     .padding(.leading, 6)
             }
