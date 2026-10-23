@@ -97,9 +97,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         let settings = SettingsStore()
         if settings.reminderOn {
             settings.reminderDay += 1
-            // reschedule 标注 @MainActor（UNUserNotificationCenter 有主线程断言），
-            // 这里 didFinishLaunching 跑在主线程，但编译器不知道，显式跑在主 actor 上。
-            MainActor.assumeIsolated {
+            // reschedule 标注 @MainActor（UNUserNotificationCenter 有主线程断言）。
+            // didFinishLaunching 本身就在主线程，但编译器无法证明，用 Task 把调用
+            // 挪到 @MainActor 上下文，比 assumeIsolated 更稳妥（后者在某些 Swift 版本
+            // 对闭包内调用会触发编译器边界限制）。
+            Task { @MainActor in
                 StudyReminderScheduler.reschedule(settings)
             }
         }

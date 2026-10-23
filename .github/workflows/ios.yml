@@ -92,7 +92,7 @@ jobs:
             GLM_API_KEY="${{ secrets.GLM_API_KEY }}" \
             DEEPSEEK_API_KEY="${{ secrets.DEEPSEEK_API_KEY }}" \
             DEFAULT_PROVIDER="${{ secrets.DEFAULT_PROVIDER }}" \
-            | tail -40
+            | tee build.log
 
       - name: 启动模拟器并逐屏截图
         run: |
