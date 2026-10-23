@@ -106,14 +106,6 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             }
         }
 
-        // 如果是被一条学习提醒点开冷启动的，标记一下，根视图建好去「我的」页。
-        // 注意：本地通知冷启动走 `.notification`（不是 `.remoteNotification`，
-        // 那是远程推送的 key），iOS 13+ 才是这个；拿错 key 冷启动点通知就进不了指定页。
-        if let notification = launchOptions?[.notification] as? UNNotification,
-           notification.request.identifier == StudyReminder.requestIdentifier {
-            pendingReminderOpen = true
-        }
-
         // 启动清一次角标：提醒带 badge，用户点开 App 后不该还挂着红点。
         // 不在这里清，角标会一直累加（每次提醒 +1），家长看着烦。
         application.applicationIconBadgeNumber = 0
@@ -130,13 +122,18 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         completionHandler([.banner, .sound, .badge])
     }
 
-    // 用户点通知：转交给调度器，由它发 NotificationCenter 事件
+    // 用户点通知：转交给调度器，由它发 NotificationCenter 事件。
+    // 本地通知冷启动**不**走 didFinishLaunching 的 launchOptions（那是远程推送的通道，
+    // 本地通知冷启动同样会回调这里，但在 RootView 建立之前），所以用 pendingReminderOpen
+    // 兜底：didReceive 先打标记，RootView 的 .task 消费并跳「我的」；热启动则直接被
+    // .onReceive(studyReminderTapped) 捕获，两条路径幂等，不会跳两次。
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         StudyReminderScheduler.handleLaunch(from: response)
+        pendingReminderOpen = true
         completionHandler()
     }
 
