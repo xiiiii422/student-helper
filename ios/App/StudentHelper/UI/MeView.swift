@@ -382,10 +382,7 @@ struct MeView: View {
                             .labelsHidden()
                             .navigationTitle("提醒时间")
                             .navigationBarTitleDisplayMode(.inline)
-                            .toolbar {
-                                Button("完成") { showTimePicker = false }
-                                    .keyboardShortcut(.defaultAction)
-                            }
+                            .navigationBarItems(trailing: Button("完成") { showTimePicker = false })
                         }
                         .presentationDetents([.medium])
                     }
