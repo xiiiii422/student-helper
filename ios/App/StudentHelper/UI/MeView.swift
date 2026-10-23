@@ -258,6 +258,14 @@ struct MeView: View {
                 )
             }
 
+            // 一句话学习小结：完全由真实统计算出来，给家长/孩子一句人话总结。
+            // 空库、零提问都分别给明确文案，绝不显示 NaN/占位符。
+            Text(studySummary(stats))
+                .font(HyperType.bodyMedium)
+                .foregroundStyle(palette.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 2)
+
             // 最近 7 天柱状图：高度按最大值归一，全 0 时给一条平线而不是空框
             VStack(alignment: .leading, spacing: 4) {
                 let peak = max(stats.last7Days.map(\.questions).max() ?? 0, 1)
@@ -342,6 +350,21 @@ struct MeView: View {
                 .foregroundStyle(palette.textSecondary)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    /// 一句话学习小结，纯展示、由真实统计算出。枚举所有分支，避免空库/零提问出现占位符。
+    private func studySummary(_ s: StudyStats.Summary) -> String {
+        if s.totalQuestions == 0 {
+            return "还没有提问记录，去任意一科问一题就可以开始统计啦。"
+        }
+        let top = s.topSubject.map { SubjectLabel.of($0) } ?? "—"
+        if s.streakDays >= 3 {
+            return "最近连续 \(s.streakDays) 天都在学，最爱问\(top)，继续保持！"
+        }
+        if s.activeDays == 1 {
+            return "今天刚起步，已问 \(s.totalQuestions) 题，\(top)问得最多。"
+        }
+        return "累计问了 \(s.totalQuestions) 题，覆盖 \(s.activeDays) 天，最常问\(top)。"
     }
 
     private var themeSection: some View {
