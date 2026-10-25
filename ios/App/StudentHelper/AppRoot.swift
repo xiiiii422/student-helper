@@ -240,6 +240,8 @@ final class AppContainer: ObservableObject {
         case .selfTest: return (.me, .favorites)
         case .compositionEmpty: return (.composition, nil)
         case .compositionDetail: return (.composition, .compositionDetail(1))
+        case .compositionTemplates: return (.composition, .templateList)
+        case .compositionTemplateDetail: return (.composition, .templateDetail(101))
         case .essay: return (.chinese, .essay)
         case .search: return (.me, .search)
         }
@@ -412,6 +414,21 @@ struct RootView: View {
             CompositionNewView(vm: CompositionNewViewModel(
                 store: container.store, llm: container.llm
             ))
+        case .templateList:
+            CompositionTemplateListView()
+        case .templateDetail(let id):
+            CompositionTemplateDetailView(
+                template: CompositionTemplate.all.first(where: { $0.id == id })
+                    ?? CompositionTemplate.all[0]
+            )
+        case .compositionNewWithTemplate(let title, let outline):
+            CompositionNewView(
+                vm: CompositionNewViewModel(
+                    store: container.store, llm: container.llm
+                ),
+                prefillTitle: title,
+                prefillRequirement: outline
+            )
         case .compositionDetail(let id):
             CompositionDetailView(id: id, vm: CompositionDetailViewModel(
                 id: id, store: container.store, llm: container.llm

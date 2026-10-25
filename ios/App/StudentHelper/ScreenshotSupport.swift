@@ -25,6 +25,10 @@ enum UITestScreen: String {
     case selfTest
     /// 空对话页（「可以这样问」那一屏）
     case chatEmpty
+    /// 作文模板库列表（离线参考资料，验证分类与条目排版）
+    case compositionTemplates
+    /// 作文模板库详情（框架 + 参考片段 + 「用模板去写」）
+    case compositionTemplateDetail
 }
 
 enum ScreenshotMode {
@@ -208,6 +212,9 @@ enum ScreenshotMode {
             store.toggleFavorite(messageId: a3.id)
             store.setReviewed(messageId: a3.id, mastered: false)
         case .compositionEmpty:
+            break
+        case .compositionTemplates, .compositionTemplateDetail:
+            // 模板库是离线静态数据（CompositionTemplate.all），无需预置，直接截真实内容
             break
         case .compositionDetail:
             store.insert(Composition(

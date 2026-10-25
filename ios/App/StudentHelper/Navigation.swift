@@ -10,6 +10,9 @@ enum Route: Hashable {
     case compositionNew
     case compositionDetail(Int)
     case essay
+    case templateList
+    case templateDetail(Int)
+    case compositionNewWithTemplate(title: String, outline: String)
 }
 
 /// 导航栈容器。子页面（错题本 / 模型服务设置 / 新建作文 / 作文详情 / 生成作文）

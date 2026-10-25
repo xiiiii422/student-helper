@@ -21,6 +21,7 @@ struct CompositionListView: View {
                     HStack(spacing: 12) {
                         // 「生成作文」以前只有桌面长按图标才能进，App 里找不到入口
                         IosTextButton(text: "生成作文") { router.push(.essay) }
+                        IosTextButton(text: "模板库") { router.push(.templateList) }
                         IosTextButton(text: "新建批改") { router.push(.compositionNew) }
                     }
                 )
@@ -88,6 +89,13 @@ struct CompositionListView: View {
             }
             .buttonStyle(.plain)
             .padding(.top, 22)
+            Button { router.push(.templateList) } label: {
+                Text("先看看作文模板库")
+                    .font(HyperType.labelLarge)
+                    .foregroundStyle(Hyper.composition)
+                    .padding(.top, 10)
+            }
+            .buttonStyle(.plain)
             Spacer()
         }
         .frame(maxWidth: .infinity)
@@ -265,6 +273,14 @@ struct CompositionNewView: View {
     @EnvironmentObject private var router: Router
     @State private var showCamera = false
     @State private var showLibrary = false
+
+    /// 从「作文模板库」点「用模板去写」时，把模板标题与写作框架预填进要求栏，
+    /// 学生直接照框架填空即可。两个参数都带默认值，不影响其它场景的调用。
+    init(vm: CompositionNewViewModel, prefillTitle: String = "", prefillRequirement: String = "") {
+        _vm = StateObject(wrappedValue: vm)
+        if !prefillTitle.isEmpty { vm.title = prefillTitle }
+        if !prefillRequirement.isEmpty { vm.requirement = prefillRequirement }
+    }
 
     var body: some View {
         ScrollView {
