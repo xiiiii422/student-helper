@@ -131,6 +131,7 @@ struct ChatView: View {
                         IosTextButton(text: "公式") { router.push(.formulaList) }
                     } else if vm.subject == "english" {
                         IosTextButton(text: "句型") { router.push(.englishList) }
+                        IosTextButton(text: "词汇") { router.push(.vocabList) }
                     }
                     IosTextButton(text: "清空") { showClearConfirm = true }
                 }

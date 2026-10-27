@@ -252,6 +252,8 @@ final class AppContainer: ObservableObject {
         case .englishEntryDetail: return (.english, .englishDetail(4001))
         case .idiomLibrary: return (.chinese, .idiomList)
         case .idiomDetail: return (.chinese, .idiomDetail(5001))
+        case .vocabLibrary: return (.english, .vocabList)
+        case .vocabDetail: return (.english, .vocabDetail(6001))
         case .essay: return (.chinese, .essay)
         case .search: return (.me, .search)
         }
@@ -465,6 +467,13 @@ struct RootView: View {
             IdiomDetailView(
                 idiom: Idiom.all.first(where: { $0.id == id })
                     ?? Idiom.all[0]
+            )
+        case .vocabList:
+            EnglishVocabListView()
+        case .vocabDetail(let id):
+            EnglishVocabDetailView(
+                group: VocabGroup.all.first(where: { $0.id == id })
+                    ?? VocabGroup.all[0]
             )
         case .compositionNewWithTemplate(let title, let outline):
             CompositionNewView(

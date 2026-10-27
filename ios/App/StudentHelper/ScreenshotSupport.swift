@@ -49,6 +49,10 @@ enum UITestScreen: String {
     case idiomLibrary
     /// 成语解释库详情（释义 + 小故事 + 「用这个成语去写」）
     case idiomDetail
+    /// 英语分类词汇速记列表（离线参考，英语页入口）
+    case vocabLibrary
+    /// 英语分类词汇速记详情（词语 + 例句 + 「用这组词去写」）
+    case vocabDetail
 }
 
 enum ScreenshotMode {
@@ -250,6 +254,9 @@ enum ScreenshotMode {
             break
         case .idiomLibrary, .idiomDetail:
             // 成语解释库是离线静态数据（Idiom.all），无需预置，直接截真实内容
+            break
+        case .vocabLibrary, .vocabDetail:
+            // 分类词汇速记是离线静态数据（VocabGroup.all），无需预置，直接截真实内容
             break
         case .compositionDetail:
             store.insert(Composition(

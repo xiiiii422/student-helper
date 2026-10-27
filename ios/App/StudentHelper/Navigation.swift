@@ -22,6 +22,8 @@ enum Route: Hashable {
     case englishDetail(Int)
     case idiomList
     case idiomDetail(Int)
+    case vocabList
+    case vocabDetail(Int)
     case compositionNewWithTemplate(title: String, outline: String)
 }
 
