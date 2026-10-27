@@ -244,6 +244,8 @@ final class AppContainer: ObservableObject {
         case .compositionTemplateDetail: return (.composition, .templateDetail(101))
         case .compositionMaterials: return (.composition, .materialList)
         case .compositionMaterialDetail: return (.composition, .materialDetail(1001))
+        case .poetryLibrary: return (.chinese, .poemList)
+        case .poetryDetail: return (.chinese, .poemDetail(2001))
         case .essay: return (.chinese, .essay)
         case .search: return (.me, .search)
         }
@@ -429,6 +431,13 @@ struct RootView: View {
             CompositionMaterialDetailView(
                 material: WritingMaterial.all.first(where: { $0.id == id })
                     ?? WritingMaterial.all[0]
+            )
+        case .poemList:
+            PoetryLibraryListView()
+        case .poemDetail(let id):
+            PoemDetailView(
+                poem: Poem.all.first(where: { $0.id == id })
+                    ?? Poem.all[0]
             )
         case .compositionNewWithTemplate(let title, let outline):
             CompositionNewView(

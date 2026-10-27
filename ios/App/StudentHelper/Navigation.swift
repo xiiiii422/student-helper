@@ -14,6 +14,8 @@ enum Route: Hashable {
     case templateDetail(Int)
     case materialList
     case materialDetail(Int)
+    case poemList
+    case poemDetail(Int)
     case compositionNewWithTemplate(title: String, outline: String)
 }
 

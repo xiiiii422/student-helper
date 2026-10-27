@@ -33,6 +33,10 @@ enum UITestScreen: String {
     case compositionMaterials
     /// 好词好句 / 写作素材库详情（好词好句 + 怎么用 + 「用素材去写」）
     case compositionMaterialDetail
+    /// 必背古诗词库列表（离线参考，语文页入口）
+    case poetryLibrary
+    /// 必背古诗词库详情（诗句 + 赏析 + 「用这首诗练笔」）
+    case poetryDetail
 }
 
 enum ScreenshotMode {
@@ -222,6 +226,9 @@ enum ScreenshotMode {
             break
         case .compositionMaterials, .compositionMaterialDetail:
             // 素材库是离线静态数据（WritingMaterial.all），无需预置，直接截真实内容
+            break
+        case .poetryLibrary, .poetryDetail:
+            // 古诗词库是离线静态数据（Poem.all），无需预置，直接截真实内容
             break
         case .compositionDetail:
             store.insert(Composition(

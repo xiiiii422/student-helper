@@ -125,6 +125,7 @@ struct ChatView: View {
                     // 语文页给「生成作文」入口（之前只有桌面长按图标能进）
                     if vm.subject == "chinese" {
                         IosTextButton(text: "生成作文") { router.push(.essay) }
+                        IosTextButton(text: "古诗词") { router.push(.poemList) }
                     }
                     IosTextButton(text: "清空") { showClearConfirm = true }
                 }
