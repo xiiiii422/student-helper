@@ -41,6 +41,10 @@ enum UITestScreen: String {
     case mathReference
     /// 数学公式 / 单位换算速查详情（公式 + 怎么用 + 「用这条去练」）
     case mathFormulaDetail
+    /// 英语常用句型 / 语法速查列表（离线参考，英语页入口）
+    case englishReference
+    /// 英语常用句型 / 语法速查详情（结构 + 怎么用 + 「用这条去练」）
+    case englishEntryDetail
 }
 
 enum ScreenshotMode {
@@ -236,6 +240,9 @@ enum ScreenshotMode {
             break
         case .mathReference, .mathFormulaDetail:
             // 公式速查是离线静态数据（MathFormula.all），无需预置，直接截真实内容
+            break
+        case .englishReference, .englishEntryDetail:
+            // 句型语法速查是离线静态数据（EnglishEntry.all），无需预置，直接截真实内容
             break
         case .compositionDetail:
             store.insert(Composition(

@@ -128,6 +128,8 @@ struct ChatView: View {
                         IosTextButton(text: "古诗词") { router.push(.poemList) }
                     } else if vm.subject == "math" {
                         IosTextButton(text: "公式") { router.push(.formulaList) }
+                    } else if vm.subject == "english" {
+                        IosTextButton(text: "句型") { router.push(.englishList) }
                     }
                     IosTextButton(text: "清空") { showClearConfirm = true }
                 }
