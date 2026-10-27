@@ -45,6 +45,10 @@ enum UITestScreen: String {
     case englishReference
     /// 英语常用句型 / 语法速查详情（结构 + 怎么用 + 「用这条去练」）
     case englishEntryDetail
+    /// 成语解释库列表（离线参考，语文页入口）
+    case idiomLibrary
+    /// 成语解释库详情（释义 + 小故事 + 「用这个成语去写」）
+    case idiomDetail
 }
 
 enum ScreenshotMode {
@@ -243,6 +247,9 @@ enum ScreenshotMode {
             break
         case .englishReference, .englishEntryDetail:
             // 句型语法速查是离线静态数据（EnglishEntry.all），无需预置，直接截真实内容
+            break
+        case .idiomLibrary, .idiomDetail:
+            // 成语解释库是离线静态数据（Idiom.all），无需预置，直接截真实内容
             break
         case .compositionDetail:
             store.insert(Composition(

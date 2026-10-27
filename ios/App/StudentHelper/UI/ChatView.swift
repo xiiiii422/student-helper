@@ -126,6 +126,7 @@ struct ChatView: View {
                     if vm.subject == "chinese" {
                         IosTextButton(text: "生成作文") { router.push(.essay) }
                         IosTextButton(text: "古诗词") { router.push(.poemList) }
+                        IosTextButton(text: "成语") { router.push(.idiomList) }
                     } else if vm.subject == "math" {
                         IosTextButton(text: "公式") { router.push(.formulaList) }
                     } else if vm.subject == "english" {

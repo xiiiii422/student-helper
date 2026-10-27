@@ -20,6 +20,8 @@ enum Route: Hashable {
     case formulaDetail(Int)
     case englishList
     case englishDetail(Int)
+    case idiomList
+    case idiomDetail(Int)
     case compositionNewWithTemplate(title: String, outline: String)
 }
 
