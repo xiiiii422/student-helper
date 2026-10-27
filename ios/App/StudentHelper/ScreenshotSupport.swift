@@ -53,6 +53,14 @@ enum UITestScreen: String {
     case vocabLibrary
     /// 英语分类词汇速记详情（词语 + 例句 + 「用这组词去写」）
     case vocabDetail
+    /// 易错字辨析库列表（离线参考，语文页入口）
+    case confusableLibrary
+    /// 易错字辨析库详情（字形区分 + 口诀 + 「用这组字去写」）
+    case confusableDetail
+    /// 英语日常对话库列表（离线参考，英语页入口）
+    case dialogueLibrary
+    /// 英语日常对话库详情（情景对话 + 贴士 + 「用这段对话去说」）
+    case dialogueDetail
 }
 
 enum ScreenshotMode {
@@ -257,6 +265,12 @@ enum ScreenshotMode {
             break
         case .vocabLibrary, .vocabDetail:
             // 分类词汇速记是离线静态数据（VocabGroup.all），无需预置，直接截真实内容
+            break
+        case .confusableLibrary, .confusableDetail:
+            // 易错字辨析库是离线静态数据（ConfusableGroup.all），无需预置，直接截真实内容
+            break
+        case .dialogueLibrary, .dialogueDetail:
+            // 日常对话库是离线静态数据（Dialogue.all），无需预置，直接截真实内容
             break
         case .compositionDetail:
             store.insert(Composition(

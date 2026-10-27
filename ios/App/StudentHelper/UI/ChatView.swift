@@ -127,11 +127,13 @@ struct ChatView: View {
                         IosTextButton(text: "生成作文") { router.push(.essay) }
                         IosTextButton(text: "古诗词") { router.push(.poemList) }
                         IosTextButton(text: "成语") { router.push(.idiomList) }
+                        IosTextButton(text: "易错字") { router.push(.confusableList) }
                     } else if vm.subject == "math" {
                         IosTextButton(text: "公式") { router.push(.formulaList) }
                     } else if vm.subject == "english" {
                         IosTextButton(text: "句型") { router.push(.englishList) }
                         IosTextButton(text: "词汇") { router.push(.vocabList) }
+                        IosTextButton(text: "对话") { router.push(.dialogueList) }
                     }
                     IosTextButton(text: "清空") { showClearConfirm = true }
                 }
