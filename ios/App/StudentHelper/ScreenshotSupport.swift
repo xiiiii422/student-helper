@@ -37,6 +37,10 @@ enum UITestScreen: String {
     case poetryLibrary
     /// 必背古诗词库详情（诗句 + 赏析 + 「用这首诗练笔」）
     case poetryDetail
+    /// 数学公式 / 单位换算速查列表（离线参考，数学页入口）
+    case mathReference
+    /// 数学公式 / 单位换算速查详情（公式 + 怎么用 + 「用这条去练」）
+    case mathFormulaDetail
 }
 
 enum ScreenshotMode {
@@ -229,6 +233,9 @@ enum ScreenshotMode {
             break
         case .poetryLibrary, .poetryDetail:
             // 古诗词库是离线静态数据（Poem.all），无需预置，直接截真实内容
+            break
+        case .mathReference, .mathFormulaDetail:
+            // 公式速查是离线静态数据（MathFormula.all），无需预置，直接截真实内容
             break
         case .compositionDetail:
             store.insert(Composition(
