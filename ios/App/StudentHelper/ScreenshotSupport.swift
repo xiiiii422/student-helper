@@ -29,6 +29,10 @@ enum UITestScreen: String {
     case compositionTemplates
     /// 作文模板库详情（框架 + 参考片段 + 「用模板去写」）
     case compositionTemplateDetail
+    /// 好词好句 / 写作素材库列表（离线参考资料，验证分类与条目排版）
+    case compositionMaterials
+    /// 好词好句 / 写作素材库详情（好词好句 + 怎么用 + 「用素材去写」）
+    case compositionMaterialDetail
 }
 
 enum ScreenshotMode {
@@ -215,6 +219,9 @@ enum ScreenshotMode {
             break
         case .compositionTemplates, .compositionTemplateDetail:
             // 模板库是离线静态数据（CompositionTemplate.all），无需预置，直接截真实内容
+            break
+        case .compositionMaterials, .compositionMaterialDetail:
+            // 素材库是离线静态数据（WritingMaterial.all），无需预置，直接截真实内容
             break
         case .compositionDetail:
             store.insert(Composition(

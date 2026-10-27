@@ -22,6 +22,7 @@ struct CompositionListView: View {
                         // 「生成作文」以前只有桌面长按图标才能进，App 里找不到入口
                         IosTextButton(text: "生成作文") { router.push(.essay) }
                         IosTextButton(text: "模板库") { router.push(.templateList) }
+                        IosTextButton(text: "素材库") { router.push(.materialList) }
                         IosTextButton(text: "新建批改") { router.push(.compositionNew) }
                     }
                 )
@@ -94,6 +95,13 @@ struct CompositionListView: View {
                     .font(HyperType.labelLarge)
                     .foregroundStyle(Hyper.composition)
                     .padding(.top, 10)
+            }
+            .buttonStyle(.plain)
+            Button { router.push(.materialList) } label: {
+                Text("去好词好句素材库逛逛")
+                    .font(HyperType.labelLarge)
+                    .foregroundStyle(Hyper.composition)
+                    .padding(.top, 6)
             }
             .buttonStyle(.plain)
             Spacer()
