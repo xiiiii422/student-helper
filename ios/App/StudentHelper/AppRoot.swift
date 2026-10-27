@@ -258,6 +258,10 @@ final class AppContainer: ObservableObject {
         case .confusableDetail: return (.chinese, .confusableDetail(7001))
         case .dialogueLibrary: return (.english, .dialogueList)
         case .dialogueDetail: return (.english, .dialogueDetail(8001))
+        case .problemLibrary: return (.math, .problemList)
+        case .problemDetail: return (.math, .problemDetail(9001))
+        case .polyphoneLibrary: return (.chinese, .polyphoneList)
+        case .polyphoneDetail: return (.chinese, .polyphoneDetail(10001))
         case .essay: return (.chinese, .essay)
         case .search: return (.me, .search)
         }
@@ -492,6 +496,20 @@ struct RootView: View {
             EnglishDialogueDetailView(
                 dialogue: Dialogue.all.first(where: { $0.id == id })
                     ?? Dialogue.all[0]
+            )
+        case .problemList:
+            MathProblemListView()
+        case .problemDetail(let id):
+            MathProblemDetailView(
+                type: ProblemType.all.first(where: { $0.id == id })
+                    ?? ProblemType.all[0]
+            )
+        case .polyphoneList:
+            PolyphoneListView()
+        case .polyphoneDetail(let id):
+            PolyphoneDetailView(
+                polyphone: Polyphone.all.first(where: { $0.id == id })
+                    ?? Polyphone.all[0]
             )
         case .compositionNewWithTemplate(let title, let outline):
             CompositionNewView(

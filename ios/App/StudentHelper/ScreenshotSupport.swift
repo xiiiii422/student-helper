@@ -61,6 +61,14 @@ enum UITestScreen: String {
     case dialogueLibrary
     /// 英语日常对话库详情（情景对话 + 贴士 + 「用这段对话去说」）
     case dialogueDetail
+    /// 数学应用题解题步骤库列表（离线参考，数学页入口）
+    case problemLibrary
+    /// 数学应用题解题步骤库详情（思路 + 步骤 + 例题 + 「用这个方法去练」）
+    case problemDetail
+    /// 多音字库列表（离线参考，语文页入口）
+    case polyphoneLibrary
+    /// 多音字库详情（读音 + 义项 + 例词 + 「用这个字去写」）
+    case polyphoneDetail
 }
 
 enum ScreenshotMode {
@@ -271,6 +279,12 @@ enum ScreenshotMode {
             break
         case .dialogueLibrary, .dialogueDetail:
             // 日常对话库是离线静态数据（Dialogue.all），无需预置，直接截真实内容
+            break
+        case .problemLibrary, .problemDetail:
+            // 应用题解题库是离线静态数据（ProblemType.all），无需预置，直接截真实内容
+            break
+        case .polyphoneLibrary, .polyphoneDetail:
+            // 多音字库是离线静态数据（Polyphone.all），无需预置，直接截真实内容
             break
         case .compositionDetail:
             store.insert(Composition(

@@ -28,6 +28,10 @@ enum Route: Hashable {
     case confusableDetail(Int)
     case dialogueList
     case dialogueDetail(Int)
+    case problemList
+    case problemDetail(Int)
+    case polyphoneList
+    case polyphoneDetail(Int)
     case compositionNewWithTemplate(title: String, outline: String)
 }
 
